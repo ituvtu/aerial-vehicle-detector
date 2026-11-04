@@ -321,3 +321,38 @@ def ensure_images_available(
         raise RuntimeError(
             f"{len(still_missing)} frames are still missing in '{img_dir}' after extraction: {still_missing[:20]}"
         )
+
+
+DEFAULT_HF_RAW_VIDEO_URL = (
+    "https://huggingface.co/datasets/ituvtu/aerial-vehicle-detector-data/resolve/main/{video_id}.mp4"
+)
+
+
+def ensure_raw_eval_video_available(
+    video_id: str = "32179597",
+    raw_videos_dir: str | Path = "data/raw_videos",
+    video_url: str | None = None,
+) -> Path:
+    """
+    Ensures that raw evaluation video {video_id}.mp4 is present in data/raw_videos/.
+    1) If local file exists and size > 1 MB, returns its path.
+    2) Otherwise (e.g. in Google Colab), downloads from Hugging Face atomically via .part file.
+    """
+    vdir = Path(raw_videos_dir)
+    vdir.mkdir(parents=True, exist_ok=True)
+    target_path = vdir / f"{video_id}.mp4"
+
+    if target_path.exists() and target_path.stat().st_size > 1_000_000:
+        return target_path
+
+    url = video_url or DEFAULT_HF_RAW_VIDEO_URL.format(video_id=video_id)
+    print(f"[Raw Video] Downloading '{video_id}.mp4' from {url} ...")
+    _download_atomic(url, target_path)
+
+    if not target_path.exists() or target_path.stat().st_size <= 1_000_000:
+        raise RuntimeError(
+            f"Failed to fetch valid raw video '{target_path}' (size: {target_path.stat().st_size if target_path.exists() else 0} bytes)"
+        )
+    print(f"[Raw Video] Successfully fetched '{video_id}.mp4' ({target_path.stat().st_size / 1e6:.1f} MB)")
+    return target_path
+

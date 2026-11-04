@@ -2,99 +2,99 @@
   "total_active_frames": 155,
   "rule2_label_correction_summary": {
     "raw_total": 3156,
-    "corrected_total": 3156,
-    "unchanged": 3156,
-    "fixed": 0,
-    "removed": 0,
-    "added": 0
+    "corrected_total": 2936,
+    "unchanged": 2287,
+    "fixed": 136,
+    "removed": 733,
+    "added": 513
   },
   "rule2_by_split": {
     "train": {
       "raw_total": 1887,
-      "corrected_total": 1887,
-      "unchanged": 1887,
-      "fixed": 0,
-      "removed": 0,
-      "added": 0
+      "corrected_total": 1675,
+      "unchanged": 1245,
+      "fixed": 65,
+      "removed": 577,
+      "added": 365
     },
     "val": {
       "raw_total": 445,
-      "corrected_total": 445,
-      "unchanged": 445,
-      "fixed": 0,
-      "removed": 0,
-      "added": 0
+      "corrected_total": 422,
+      "unchanged": 299,
+      "fixed": 15,
+      "removed": 131,
+      "added": 108
     },
     "test": {
       "raw_total": 824,
-      "corrected_total": 824,
-      "unchanged": 824,
-      "fixed": 0,
-      "removed": 0,
-      "added": 0
+      "corrected_total": 839,
+      "unchanged": 743,
+      "fixed": 56,
+      "removed": 25,
+      "added": 40
     }
   },
   "rule4_distance_bands_by_split": {
     "train": {
-      "0-200m": 1184,
-      "200-400m": 620,
-      ">400m": 83,
-      "total": 1887
+      "0-200m": 751,
+      "200-400m": 655,
+      ">400m": 269,
+      "total": 1675
     },
     "val": {
-      "0-200m": 285,
-      "200-400m": 152,
-      ">400m": 8,
-      "total": 445
+      "0-200m": 230,
+      "200-400m": 131,
+      ">400m": 61,
+      "total": 422
     },
     "test": {
-      "0-200m": 442,
-      "200-400m": 351,
-      ">400m": 31,
-      "total": 824
+      "0-200m": 441,
+      "200-400m": 352,
+      ">400m": 46,
+      "total": 839
     }
   },
   "rule4_distance_bands_by_role": {
     "train_A": {
-      "0-200m": 29,
-      "200-400m": 460,
-      ">400m": 35,
-      "total": 524
+      "0-200m": 46,
+      "200-400m": 502,
+      ">400m": 218,
+      "total": 766
     },
     "train_B": {
-      "0-200m": 149,
-      "200-400m": 138,
-      ">400m": 54,
-      "total": 341
+      "0-200m": 118,
+      "200-400m": 146,
+      ">400m": 110,
+      "total": 374
     },
     "train_C": {
-      "0-200m": 287,
-      "200-400m": 133,
+      "0-200m": 282,
+      "200-400m": 134,
       ">400m": 2,
-      "total": 422
+      "total": 418
     },
     "train_D": {
-      "0-200m": 1004,
-      "200-400m": 41,
+      "0-200m": 535,
+      "200-400m": 4,
       ">400m": 0,
-      "total": 1045
+      "total": 539
     },
     "eval": {
-      "0-200m": 83,
+      "0-200m": 85,
       "200-400m": 0,
       ">400m": 0,
-      "total": 83
+      "total": 85
     },
     "eval_B": {
-      "0-200m": 359,
-      "200-400m": 351,
-      ">400m": 31,
-      "total": 741
+      "0-200m": 356,
+      "200-400m": 352,
+      ">400m": 46,
+      "total": 754
     }
   },
   "rule4_eval_band_check": {
-    "eval_0_200m_vehicles": 442,
-    "eval_200_400m_vehicles": 351,
+    "eval_0_200m_vehicles": 441,
+    "eval_200_400m_vehicles": 352,
     "both_bands_populated": true
   }
 }

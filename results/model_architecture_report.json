@@ -1,0 +1,24 @@
+{
+  "model_name": "YOLO26-Pico-P2",
+  "yaml_path": "D:\\Ivan\\Repos\\aerial-vehicle-detector\\configs\\yolo26_pico_p2.yaml",
+  "unfused_params": 478590,
+  "fused_params": 427567,
+  "max_params_limit": 500000,
+  "strides": [
+    4.0,
+    8.0,
+    16.0
+  ],
+  "num_layers": 22,
+  "blocks": {
+    "backbone_layers_0_8": 220448,
+    "neck_layers_9_20": 162496,
+    "detect_head_layer_21": 95646
+  },
+  "pretrained_transfer": {
+    "source": "yolo26n.pt",
+    "transferred_items": 0,
+    "total_items": 0,
+    "message": ""
+  }
+}

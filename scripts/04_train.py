@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
 """
-Phase 4: Training pipeline for YOLO26-Pico-P2 (<500k params) & Validation Threshold Calibration.
+Phase 4: Training pipeline for YOLO26-Pico-P2 (<500k params)
+Supports Ablation Study:
+  - exp1_mosaic: rect=False, mosaic=1.0, close_mosaic=25, scale=0.5
+  - exp2_rect_nomosaic: rect=True, mosaic=0.0, close_mosaic=0, scale=0.25
+Features:
+  - Architecture inspection & verification (<500k params, P2-P4 strides)
+  - Validation threshold calibration strictly on val split (Rule 1)
+  - Append-only Model Registry & Champion Guard
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +38,13 @@ from src.manifest_manager import (
     parse_yolo_label_file,
     sync_manifest_splits,
 )
-from src.metrics import audit_model_architecture, calibrate_confidence_threshold
+from src.metrics import (
+    audit_model_architecture,
+    calibrate_confidence_threshold,
+    evaluate_split_metrics,
+    inspect_and_verify_architecture,
+)
+from src.model_registry import ModelRegistry
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -47,19 +66,280 @@ def verify_rule1_split_isolation(splits_dir: Path) -> None:
                 )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Train YOLO26-Pico-P2 detector & calibrate on validation split.")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=PROJECT_ROOT / "configs" / "project_config.yaml",
-        help="Path to project_config.yaml",
+def run_val_calibration(
+    weights_path: Path,
+    val_records: list[dict[str, Any]],
+    labels_dir: Path,
+    imgsz: int = 1024,
+    device: str = "",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Evaluates model on 18 val frames at imgsz=1024, rect=True across confidence thresholds
+    to find tau* maximizing macro_f1 = 0.5 * (F1_0_200m + F1_200_400m).
+    """
+    from ultralytics import YOLO
+
+    model = YOLO(str(weights_path))
+    gt_boxes_by_frame: dict[str, list[tuple[float, float, float, float]]] = {}
+    raw_preds_by_frame: dict[str, list[tuple[float, float, float, float, float]]] = {}
+
+    for r in val_records:
+        fid = r["frame_id"]
+        img_p = PROJECT_ROOT / r["image_path"]
+        w = int(r["width"])
+        h = int(r["height"])
+
+        # Ground truth
+        lbl_p = labels_dir / f"{fid}.txt"
+        norm_gt = parse_yolo_label_file(lbl_p) if lbl_p.exists() else []
+        gt_pixel_boxes = []
+        for xc, yc, bw, bh in norm_gt:
+            x1 = (xc - bw / 2.0) * w
+            y1 = (yc - bh / 2.0) * h
+            x2 = (xc + bw / 2.0) * w
+            y2 = (yc + bh / 2.0) * h
+            gt_pixel_boxes.append((x1, y1, x2, y2))
+        gt_boxes_by_frame[fid] = gt_pixel_boxes
+
+        # Predict
+        pred_res = model.predict(
+            source=str(img_p),
+            imgsz=imgsz,
+            rect=True,
+            conf=0.01,
+            iou=0.50,
+            verbose=False,
+            device=device or None,
+        )
+
+        frame_preds: list[tuple[float, float, float, float, float]] = []
+        if pred_res and pred_res[0].boxes is not None:
+            boxes_np = pred_res[0].boxes.xyxy.cpu().numpy()
+            confs_np = pred_res[0].boxes.conf.cpu().numpy()
+            for b, c in zip(boxes_np, confs_np):
+                frame_preds.append((float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(c)))
+        raw_preds_by_frame[fid] = frame_preds
+
+    candidate_thresholds = [round(0.10 + 0.05 * i, 2) for i in range(16)]  # 0.10 .. 0.85
+    calib = calibrate_confidence_threshold(
+        val_records=val_records,
+        gt_boxes_by_frame=gt_boxes_by_frame,
+        raw_preds_by_frame=raw_preds_by_frame,
+        candidate_thresholds=candidate_thresholds,
     )
-    parser.add_argument("--epochs", type=int, default=None, help="Override training epochs")
-    parser.add_argument("--batch", type=int, default=None, help="Override training batch size")
-    parser.add_argument("--device", type=str, default="", help="CUDA device or cpu")
-    parser.add_argument("--dry-run", action="store_true", help="Audit model architecture, verify splits, and exit")
+
+    best_tau = calib["best_conf_threshold"]
+    metrics_at_best = evaluate_split_metrics(
+        frame_records=val_records,
+        gt_boxes_by_frame=gt_boxes_by_frame,
+        raw_preds_by_frame=raw_preds_by_frame,
+        conf_threshold=best_tau,
+    )
+    return calib, metrics_at_best
+
+
+def plot_single_experiment_curves(csv_path: Path, output_png: Path, exp_name: str) -> None:
+    """Plots training and validation loss curves from Ultralytics results.csv."""
+    if not csv_path.exists():
+        return
+    import pandas as pd
+
+    df = pd.read_csv(csv_path)
+    df.columns = [c.strip() for c in df.columns]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    if "epoch" in df.columns:
+        epochs = df["epoch"]
+    else:
+        epochs = range(len(df))
+
+    # Loss plot
+    loss_cols = [c for c in df.columns if "loss" in c.lower()]
+    for col in loss_cols[:4]:
+        ax1.plot(epochs, df[col], label=col)
+    ax1.set_title(f"Loss Curves ({exp_name})")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # Metric plot
+    metric_cols = [c for c in df.columns if "map" in c.lower() or "precision" in c.lower() or "recall" in c.lower()]
+    for col in metric_cols[:4]:
+        ax2.plot(epochs, df[col], label=col)
+    ax2.set_title(f"Validation Metrics ({exp_name})")
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("Score")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_png, dpi=200)
+    plt.close()
+
+
+def plot_ablation_comparison_curves(
+    csv1: Path,
+    csv2: Path,
+    out_png: Path,
+    assets_png: Path | None = None,
+) -> None:
+    """Plots side-by-side comparison of exp1_mosaic vs exp2_rect_nomosaic."""
+    import pandas as pd
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+
+    def _plot_csv(csv_path: Path, label_prefix: str, color: str):
+        if not csv_path.exists():
+            return
+        df = pd.read_csv(csv_path)
+        df.columns = [c.strip() for c in df.columns]
+        epochs = df["epoch"] if "epoch" in df.columns else range(len(df))
+
+        # Box loss
+        box_col = [c for c in df.columns if "train/box_loss" in c or "box_loss" in c]
+        if box_col:
+            ax1.plot(epochs, df[box_col[0]], label=f"{label_prefix} Train Box Loss", color=color, linestyle="-")
+        val_box_col = [c for c in df.columns if "val/box_loss" in c]
+        if val_box_col:
+            ax1.plot(epochs, df[val_box_col[0]], label=f"{label_prefix} Val Box Loss", color=color, linestyle="--")
+
+        # mAP50
+        map_col = [c for c in df.columns if "metrics/mAP50(B)" in c or "mAP50" in c]
+        if map_col:
+            ax2.plot(epochs, df[map_col[0]], label=f"{label_prefix} mAP@0.5", color=color, linewidth=2)
+
+    _plot_csv(csv1, "exp1_mosaic", "#1f77b4")
+    _plot_csv(csv2, "exp2_rect_nomosaic", "#ff7f0e")
+
+    ax1.set_title("Ablation Study: Loss Convergence")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    ax2.set_title("Ablation Study: Validation mAP@0.5")
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("mAP@0.5")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_png, dpi=200)
+    if assets_png:
+        assets_png.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(assets_png, dpi=200)
+    plt.close()
+
+
+def train_single_experiment(
+    exp_name: str,
+    arch_yaml: Path,
+    data_yaml: Path,
+    epochs: int,
+    batch: int,
+    imgsz: int,
+    device: str,
+    weights_dir: Path,
+    results_dir: Path,
+    exp_opts: dict[str, Any],
+) -> Path:
+    """Trains a single model experiment and returns path to its best.pt."""
+    from ultralytics import YOLO
+
+    print(f"\n{'='*70}\n[Training] Starting Experiment: {exp_name}\nHyperparameters: {exp_opts}\n{'='*70}")
+    model = YOLO(str(arch_yaml))
+
+    # Pretrained stem transfer
+    try:
+        model.load("yolo26n.pt")
+        print("[Pretrained Transfer] Transferred stem weights from yolo26n.pt")
+    except Exception as exc:
+        print(f"[Pretrained Transfer] Starting from scratch ({exc})")
+
+    train_args = {
+        "data": str(data_yaml.resolve()),
+        "epochs": epochs,
+        "batch": batch,
+        "imgsz": imgsz,
+        "device": device or None,
+        "patience": 40,
+        "cos_lr": True,
+        "warmup_epochs": 5.0,
+        "cache": "ram",
+        "amp": True,
+        "workers": 4,
+        "single_cls": True,
+        "seed": 42,
+        # Safe aerial augmentations
+        "flipud": 0.5,
+        "fliplr": 0.5,
+        "degrees": 10.0,
+        "translate": 0.1,
+        "hsv_h": 0.015,
+        "hsv_s": 0.7,
+        "hsv_v": 0.4,
+        "mixup": 0.0,
+        "copy_paste": 0.0,
+        "project": str(weights_dir / "runs"),
+        "name": exp_name,
+        "exist_ok": True,
+        "verbose": True,
+    }
+    train_args.update(exp_opts)
+
+    train_results = model.train(**train_args)
+    save_dir = Path(train_results.save_dir) if hasattr(train_results, "save_dir") else weights_dir / "runs" / exp_name
+    best_checkpoint = save_dir / "weights" / "best.pt"
+
+    dest_best_pt = weights_dir / f"{exp_name}_best.pt"
+    if best_checkpoint.exists():
+        shutil.copy2(best_checkpoint, dest_best_pt)
+    else:
+        # Fallback to model weights on disk
+        dest_best_pt = weights_dir / f"{exp_name}_best.pt"
+        torch_model = getattr(model, "model", None)
+        if torch_model is not None:
+            import torch
+            torch.save({"model": torch_model}, dest_best_pt)
+
+    # Save training history CSV and curves
+    results_csv = save_dir / "results.csv"
+    dest_csv = results_dir / f"train_history_{exp_name}.csv"
+    if results_csv.exists():
+        shutil.copy2(results_csv, dest_csv)
+        plot_single_experiment_curves(
+            dest_csv, results_dir / f"training_curves_{exp_name}.png", exp_name
+        )
+
+    return dest_best_pt
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train YOLO26-Pico-P2 & Validation Threshold Calibration.")
+    parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "configs" / "project_config.yaml")
+    parser.add_argument("--mode", type=str, choices=["ablation", "exp1_mosaic", "exp2_rect_nomosaic"], default="ablation")
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--batch", type=int, default=None)
+    parser.add_argument("--imgsz", type=int, default=1024)
+    parser.add_argument("--device", type=str, default="")
+    parser.add_argument("--force-winner", type=str, default=None, choices=["exp1_mosaic", "exp2_rect_nomosaic"])
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--list-models", action="store_true", help="List registered models in weights/registry/")
+    parser.add_argument("--promote-model", type=str, default=None, help="Promote specific model_id (e.g. m001)")
     args = parser.parse_args()
+
+    registry = ModelRegistry(PROJECT_ROOT / "weights")
+
+    if args.list_models:
+        print("\n" + registry.list_models_table() + "\n")
+        return
+
+    if args.promote_model:
+        registry.promote_model(args.promote_model)
+        return
 
     cfg = load_config(args.config)
     manifest_path = PROJECT_ROOT / cfg["paths"]["manifest_path"]
@@ -68,6 +348,10 @@ def main() -> None:
     labels_dir = PROJECT_ROOT / cfg["paths"]["labels_dir"]
     weights_dir = PROJECT_ROOT / "weights"
     weights_dir.mkdir(parents=True, exist_ok=True)
+    results_dir = PROJECT_ROOT / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir = PROJECT_ROOT / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Ensure images and splits are synchronized
     ensure_images_available(
@@ -81,118 +365,174 @@ def main() -> None:
     # 2. Verify Rule 1 isolation
     verify_rule1_split_isolation(splits_dir)
 
-    # 3. Model Architecture Audit (<500k params, P2-P3-P4)
+    # 3. Model Architecture Audit & Inspection (<500k params, P2-P4)
     model_arch_yaml = PROJECT_ROOT / cfg["paths"]["model_arch_yaml"]
-    arch_report = audit_model_architecture(model_arch_yaml, max_params=cfg["training"]["max_parameters"])
-    arch_report_path = weights_dir / "model_arch_report.json"
-    arch_report_path.write_text(json.dumps(arch_report, indent=2) + "\n", encoding="utf-8")
-    print(f"\n[Architecture Audit] YOLO26-Pico-P2 verified: {arch_report['unfused_params']:,} unfused params (<500k limit)")
+    arch_report = inspect_and_verify_architecture(
+        yaml_path=model_arch_yaml,
+        pretrained_weights="yolo26n.pt",
+        output_report_path=results_dir / "model_architecture_report.json",
+        max_params=cfg["training"]["max_parameters"],
+    )
+    # Also save copy in weights/ for backward compatibility
+    (weights_dir / "model_arch_report.json").write_text(
+        json.dumps(arch_report, indent=2) + "\n", encoding="utf-8"
+    )
+    print(
+        f"\n[Architecture Verified] YOLO26-Pico-P2: {arch_report['unfused_params']:,} unfused / "
+        f"{arch_report['fused_params']:,} fused params (< 500k limit)"
+    )
 
     if args.dry_run:
         print("[Dry-Run] Architecture and splits verified successfully. Exiting clean.")
         return
 
-    # 4. Initialize model & Train
-    from ultralytics import YOLO
-
-    model = YOLO(str(model_arch_yaml))
-
-    # Attempt compatible stem transfer from yolo26n if available
-    try:
-        model.load("yolo26n.pt")
-        print("[Pretrained Transfer] Successfully loaded stem weights from yolo26n.pt")
-    except Exception as exc:
-        print(f"[Pretrained Transfer] Training from scratch (yolo26n.pt transfer note: {exc})")
-
-    t_cfg = cfg["training"]
+    # 4. Define Experiments
+    t_cfg = cfg.get("training", {})
     epochs = args.epochs or int(t_cfg.get("epochs", 150))
-    batch = args.batch or int(t_cfg.get("batch_size", 16))
+    batch = args.batch or int(t_cfg.get("batch_size", 8))
+    imgsz = args.imgsz or int(t_cfg.get("imgsz", 1024))
+    data_yaml = PROJECT_ROOT / cfg["paths"]["dataset_yaml"]
 
-    print(f"[Training] Starting YOLO26-Pico-P2 training ({epochs} epochs, batch {batch}) ...")
-    train_results = model.train(
-        data=str((PROJECT_ROOT / cfg["paths"]["dataset_yaml"]).resolve()),
-        epochs=epochs,
-        batch=batch,
-        imgsz=int(t_cfg.get("imgsz", 1024)),
-        rect=bool(t_cfg.get("train_rect", False)),
-        patience=int(t_cfg.get("patience", 35)),
-        mosaic=float(t_cfg.get("mosaic", 1.0)),
-        mixup=float(t_cfg.get("mixup", 0.15)),
-        degrees=float(t_cfg.get("degrees", 15.0)),
-        flipud=float(t_cfg.get("flipud", 0.5)),
-        fliplr=float(t_cfg.get("fliplr", 0.5)),
-        close_mosaic=15,
-        device=args.device,
-        save=True,
-        verbose=True,
-    )
+    experiments: dict[str, dict[str, Any]] = {}
+    if args.mode in ("ablation", "exp1_mosaic"):
+        experiments["exp1_mosaic"] = {
+            "rect": False,
+            "mosaic": 1.0,
+            "close_mosaic": 25,
+            "scale": 0.5,
+        }
+    if args.mode in ("ablation", "exp2_rect_nomosaic"):
+        experiments["exp2_rect_nomosaic"] = {
+            "rect": True,
+            "mosaic": 0.0,
+            "close_mosaic": 0,
+            "scale": 0.25,
+        }
 
-    best_pt_src = Path(model.trainer.save_dir) / "weights" / "best.pt"
-    best_pt_dest = PROJECT_ROOT / cfg["paths"]["best_weights_path"]
-    if best_pt_src.exists():
-        shutil.copy2(best_pt_src, best_pt_dest)
-        print(f"[Model Saved] Best weights copied to: {best_pt_dest}")
-    else:
-        # Fallback if no training took place (e.g. 0 epochs)
-        model.save(str(best_pt_dest))
+    # Load active curated ledger info for provenance
+    ledger_file = PROJECT_ROOT / "data" / "registry" / "ledger.json"
+    snapshot_id = None
+    if ledger_file.exists():
+        try:
+            l_data = json.loads(ledger_file.read_text(encoding="utf-8"))
+            snapshot_id = l_data.get("active_curated_version")
+        except Exception:
+            pass
 
-    # Re-verify best weights against < 500k limit
-    audit_model_architecture(best_pt_dest, max_params=cfg["training"]["max_parameters"])
+    # Load val records (18 frames)
+    all_frames = get_active_frames(manifest_path)
+    val_frames = all_frames[all_frames["split"] == "val"].copy()
+    val_records = val_frames.to_dict(orient="records")
 
-    # 5. Calibrate confidence threshold tau* on val split (Rule 1)
-    val_df = get_active_frames(manifest_path, split="val")
-    val_records = val_df.to_dict(orient="records")
+    exp_results: dict[str, Any] = {}
 
-    gt_boxes_by_frame: dict[str, list[tuple[float, float, float, float]]] = {}
-    raw_preds_by_frame: dict[str, list[tuple[float, float, float, float, float]]] = {}
-
-    eval_model = YOLO(str(best_pt_dest))
-
-    for rec in val_records:
-        fid = str(rec["frame_id"])
-        w = int(rec["width"])
-        h = int(rec["height"])
-
-        lbl_path = labels_dir / f"{fid}.txt"
-        yolo_boxes = parse_yolo_label_file(lbl_path)
-        gt_pixel_boxes = []
-        for box in yolo_boxes:
-            cx, cy, bw, bh = box[0] * w, box[1] * h, box[2] * w, box[3] * h
-            gt_pixel_boxes.append((cx - bw / 2.0, cy - bh / 2.0, cx + bw / 2.0, cy + bh / 2.0))
-        gt_boxes_by_frame[fid] = gt_pixel_boxes
-
-        img_path = str(PROJECT_ROOT / rec["image_path"])
-        pred_res = eval_model.predict(
-            source=img_path,
-            imgsz=int(t_cfg.get("imgsz", 1024)),
-            rect=bool(t_cfg.get("eval_rect", True)),
-            conf=0.01,
-            iou=0.50,
-            verbose=False,
+    for exp_name, exp_opts in experiments.items():
+        best_pt = train_single_experiment(
+            exp_name=exp_name,
+            arch_yaml=model_arch_yaml,
+            data_yaml=data_yaml,
+            epochs=epochs,
+            batch=batch,
+            imgsz=imgsz,
+            device=args.device,
+            weights_dir=weights_dir,
+            results_dir=results_dir,
+            exp_opts=exp_opts,
         )
-        frame_preds: list[tuple[float, float, float, float, float]] = []
-        if pred_res and pred_res[0].boxes is not None:
-            boxes_np = pred_res[0].boxes.xyxy.cpu().numpy()
-            confs_np = pred_res[0].boxes.conf.cpu().numpy()
-            for b, c in zip(boxes_np, confs_np):
-                frame_preds.append((float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(c)))
-        raw_preds_by_frame[fid] = frame_preds
 
-    calib_res = calibrate_confidence_threshold(
-        val_records=val_records,
-        gt_boxes_by_frame=gt_boxes_by_frame,
-        raw_preds_by_frame=raw_preds_by_frame,
-        fov_deg=float(cfg["optics"]["fov_long_deg"]),
-        car_length_m=float(cfg["optics"]["car_length_m"]),
-        method=cfg["optics"]["estimation_method"],
+        # Calibrate strictly on val
+        print(f"\n[Validation Calibration] Running calibration for {exp_name} on {len(val_records)} val frames ...")
+        calib_data, val_metrics = run_val_calibration(
+            weights_path=best_pt,
+            val_records=val_records,
+            labels_dir=labels_dir,
+            imgsz=imgsz,
+            device=args.device,
+        )
+
+        # Save individual calibration
+        calib_out = weights_dir / f"calibration_val_{exp_name}.json"
+        calib_out.write_text(json.dumps(calib_data, indent=2) + "\n", encoding="utf-8")
+
+        bands = val_metrics["bands"]
+        f1_near = bands["0-200m"]["f1"]
+        f1_far = bands["200-400m"]["f1"]
+        macro_f1 = float(np.mean([f1_near, f1_far]))
+        map50_0_400 = bands["overall_0_400m"]["map50"]
+
+        is_force = (args.force_winner == exp_name)
+
+        # Register in Model Registry
+        manifest = registry.register_model_run(
+            exp_name=exp_name,
+            best_pt_path=best_pt,
+            calibration_data=calib_data,
+            val_macro_f1=macro_f1,
+            val_map50=map50_0_400,
+            train_history_csv=results_dir / f"train_history_{exp_name}.csv",
+            training_curves_png=results_dir / f"training_curves_{exp_name}.png",
+            hyperparameters={"epochs": epochs, "batch": batch, "imgsz": imgsz, **exp_opts},
+            dataset_snapshot_id=snapshot_id,
+            unfused_params=arch_report["unfused_params"],
+            fused_params=arch_report["fused_params"],
+            force_champion=is_force,
+        )
+
+        exp_results[exp_name] = {
+            "model_id": manifest["model_id"],
+            "val_selection_score": manifest["val_selection_score"],
+            "val_macro_f1": macro_f1,
+            "val_map50": map50_0_400,
+            "f1_0_200m": f1_near,
+            "f1_200_400m": f1_far,
+            "best_conf_threshold": calib_data["best_conf_threshold"],
+            "checkpoint": str(best_pt),
+            "is_champion": manifest["is_champion"],
+        }
+
+    # 5. Generate Comparison Reports
+    if len(experiments) > 1:
+        plot_ablation_comparison_curves(
+            csv1=results_dir / "train_history_exp1_mosaic.csv",
+            csv2=results_dir / "train_history_exp2_rect_nomosaic.csv",
+            out_png=results_dir / "val_ablation_comparison.png",
+            assets_png=assets_dir / "training_curves.png",
+        )
+
+    # Save comparison JSON
+    comparison_json = {
+        "dataset_snapshot_id": snapshot_id,
+        "val_frames_count": len(val_records),
+        "experiments": exp_results,
+    }
+    (results_dir / "val_ablation_comparison.json").write_text(
+        json.dumps(comparison_json, indent=2) + "\n", encoding="utf-8"
     )
 
-    calib_path = weights_dir / "calibration_val.json"
-    calib_path.write_text(json.dumps(calib_res, indent=2) + "\n", encoding="utf-8")
-    print(
-        f"\n[Validation Calibration] Calibrated tau* = {calib_res['best_conf_threshold']:.2f} "
-        f"(J = {calib_res['best_objective_score']:.4f}). Saved to {calib_path}"
-    )
+    # Save comparison Markdown table
+    md_lines = [
+        "# Ablation Study Comparison on Validation Split (Rule 1 & Rule 6)",
+        "",
+        f"**Dataset Snapshot**: `{snapshot_id}` | **Validation Frames**: {len(val_records)} | **Metric**: $J = 0.5 \\cdot \\text{Macro-F1} + 0.5 \\cdot \\text{mAP@0.5}$",
+        "",
+        "| Experiment | Model ID | Rect Mode | Mosaic | $\\tau^*$ | Val F1 (0–200m) | Val F1 (200–400m) | Val Macro-F1 | Val mAP@0.5 | Selection Score | Status |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+    ]
+    for ename, eres in exp_results.items():
+        is_rect = "True" if "rect" in ename else "False"
+        is_mos = "0.0" if "nomosaic" in ename else "1.0"
+        status = "**CHAMPION** ★" if eres["is_champion"] else "Archived"
+        md_lines.append(
+            f"| **{ename}** | `{eres['model_id']}` | {is_rect} | {is_mos} | $\\tau={eres['best_conf_threshold']:.2f}$ | "
+            f"{eres['f1_0_200m']*100:.1f}% | {eres['f1_200_400m']*100:.1f}% | "
+            f"{eres['val_macro_f1']*100:.1f}% | {eres['val_map50']:.4f} | "
+            f"**{eres['val_selection_score']:.4f}** | {status} |"
+        )
+
+    md_path = results_dir / "val_ablation_comparison.md"
+    md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    print(f"\n[Ablation Report] Saved comparison to {md_path}")
+    print("\n" + registry.list_models_table() + "\n")
 
 
 if __name__ == "__main__":

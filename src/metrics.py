@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import copy
+import io
+import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -40,13 +43,125 @@ def audit_model_architecture(
     if strides != [4.0, 8.0, 16.0]:
         raise ValueError(f"Expected strides [4.0, 8.0, 16.0], got {strides}")
 
+    layers = list(model.model.model)
+    backbone_params = sum(sum(p.numel() for p in l.parameters()) for l in layers[0:9])
+    neck_params = sum(sum(p.numel() for p in l.parameters()) for l in layers[9:21])
+    head_params = sum(sum(p.numel() for p in l.parameters()) for l in layers[21:])
+
     return {
         "unfused_params": unfused_params,
         "fused_params": fused_params,
         "max_params_limit": max_params,
         "strides": strides,
-        "num_layers": len(list(model.model.model)),
+        "num_layers": len(layers),
+        "backbone_params": backbone_params,
+        "neck_params": neck_params,
+        "head_params": head_params,
     }
+
+
+def inspect_and_verify_architecture(
+    yaml_path: str | Path,
+    pretrained_weights: str = "yolo26n.pt",
+    output_report_path: str | Path | None = "results/model_architecture_report.json",
+    max_params: int = 500_000,
+) -> dict[str, Any]:
+    """
+    Detailed inspection of YOLO26-Pico-P2 architecture before training:
+    - Builds model from yaml and loads pretrained stem weights if available.
+    - Captures detailed layer information.
+    - Verifies unfused_params and fused_params are strictly < 500_000 (Rule 5).
+    - Splits params across Backbone (0..8), Neck (9..20), Detect Head (21).
+    - Saves report to output_report_path.
+    """
+    from ultralytics import YOLO
+
+    yaml_p = Path(yaml_path)
+    if not yaml_p.exists():
+        raise FileNotFoundError(f"Model architecture YAML not found at: {yaml_p}")
+
+    model = YOLO(str(yaml_p))
+
+    # Capture model info
+    try:
+        model.info(detailed=True, verbose=True)
+    except Exception:
+        pass
+
+    transferred_items = 0
+    total_pretrained_items = 0
+    transfer_msg = "none"
+
+    if pretrained_weights:
+        try:
+            # Capture stdout of transfer
+            buf = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = buf
+            try:
+                model.load(pretrained_weights)
+            finally:
+                sys.stdout = old_stdout
+            out_str = buf.getvalue()
+            transfer_msg = out_str.strip()
+            # Parse 'Transferred X/Y items'
+            if "Transferred " in out_str:
+                part = out_str.split("Transferred ")[1].split()[0]
+                if "/" in part:
+                    transferred_items = int(part.split("/")[0])
+                    total_pretrained_items = int(part.split("/")[1])
+        except Exception as exc:
+            transfer_msg = f"Transfer skipped: {exc}"
+
+    unfused_params = sum(p.numel() for p in model.model.parameters())
+
+    fused_model = copy.deepcopy(model.model)
+    fused_model.fuse(verbose=False)
+    fused_params = sum(p.numel() for p in fused_model.parameters())
+
+    assert unfused_params < max_params, f"Unfused params {unfused_params} >= {max_params}"
+    assert fused_params < max_params, f"Fused params {fused_params} >= {max_params}"
+
+    layers = list(model.model.model)
+    backbone_params = sum(sum(p.numel() for p in l.parameters()) for l in layers[0:9])
+    neck_params = sum(sum(p.numel() for p in l.parameters()) for l in layers[9:21])
+    head_params = sum(sum(p.numel() for p in l.parameters()) for l in layers[21:])
+
+    detect_layer = layers[-1]
+    strides = (
+        [float(s) for s in detect_layer.stride.tolist()]
+        if hasattr(detect_layer, "stride") and detect_layer.stride is not None
+        else [4.0, 8.0, 16.0]
+    )
+
+    report = {
+        "model_name": "YOLO26-Pico-P2",
+        "yaml_path": str(yaml_p),
+        "unfused_params": unfused_params,
+        "fused_params": fused_params,
+        "max_params_limit": max_params,
+        "strides": strides,
+        "num_layers": len(layers),
+        "blocks": {
+            "backbone_layers_0_8": backbone_params,
+            "neck_layers_9_20": neck_params,
+            "detect_head_layer_21": head_params,
+        },
+        "pretrained_transfer": {
+            "source": pretrained_weights,
+            "transferred_items": transferred_items,
+            "total_items": total_pretrained_items,
+            "message": transfer_msg[:200],
+        },
+    }
+
+    if output_report_path:
+        out_p = Path(output_report_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"[Architecture Inspection] Saved report to {out_p}")
+
+    return report
 
 
 def compute_box_iou(box1: tuple[float, float, float, float], box2: tuple[float, float, float, float]) -> float:
@@ -81,7 +196,11 @@ def match_frame_detections(
 ) -> dict[str, Any]:
     """
     Performs global greedy IoU matching of predictions to ground truth on a single frame.
-    Assigns each GT and prediction to its true optical distance band.
+    Matches against ALL GT boxes (0-200m, 200-400m, >400m) BEFORE distance categorization.
+    - Matched GT -> TP in band D_gt.
+    - Unmatched GT -> FN in band D_gt.
+    - Unmatched Pred -> FP in band D_pred.
+    - CRITICAL: Pred matching >400m GT is a TP in >400m and NOT an FP in near/far bands.
     """
     optics_cfg = CameraOpticsConfig(
         fov_long_deg=fov_deg,
@@ -153,28 +272,29 @@ def match_frame_detections(
 
 
 def compute_ap50(tp_flags: list[int], confs: list[float], total_gt: int) -> float:
-    """Computes AP@0.5 area under precision-recall envelope."""
+    """
+    Computes standard 101-point interpolated AP@0.5 (COCO standard: recall in 0.00..1.00 step 0.01).
+    """
     if total_gt <= 0 or not tp_flags:
         return 0.0
 
     order = sorted(range(len(confs)), key=lambda k: confs[k], reverse=True)
-    sorted_tp = [tp_flags[i] for i in order]
+    tps = np.array(tp_flags, dtype=float)[order]
+    fps = 1.0 - tps
 
-    tp_cum = np.cumsum(sorted_tp)
-    fp_cum = np.cumsum([1 - x for x in sorted_tp])
+    tp_cum = np.cumsum(tps)
+    fp_cum = np.cumsum(fps)
 
     recalls = tp_cum / float(total_gt)
     precisions = tp_cum / (tp_cum + fp_cum)
 
-    mrec = np.concatenate(([0.0], recalls, [1.0]))
-    mpre = np.concatenate(([1.0], precisions, [0.0]))
+    recall_thresholds = np.linspace(0.0, 1.0, 101)
+    p_interp = []
+    for r in recall_thresholds:
+        p_at_r = precisions[recalls >= r]
+        p_interp.append(float(np.max(p_at_r)) if len(p_at_r) > 0 else 0.0)
 
-    for i in range(len(mpre) - 2, -1, -1):
-        mpre[i] = max(mpre[i], mpre[i + 1])
-
-    i_change = np.where(mrec[1:] != mrec[:-1])[0]
-    ap = float(np.sum((mrec[i_change + 1] - mrec[i_change]) * mpre[i_change + 1]))
-    return max(0.0, min(1.0, ap))
+    return float(np.mean(p_interp))
 
 
 def evaluate_split_metrics(
@@ -191,9 +311,9 @@ def evaluate_split_metrics(
 ) -> dict[str, Any]:
     """
     Evaluates detection rate, precision, F1, false alarms/min, time to first detection,
-    and mAP@0.5 across distance bands ('0-200m', '200-400m', 'overall').
+    and mAP@0.5 across distance bands ('0-200m', '200-400m', '>400m', 'overall_0_400m', 'overall_all').
     """
-    bands_list = ["0-200m", "200-400m", "overall"]
+    bands_list = ["0-200m", "200-400m", ">400m", "overall_0_400m", "overall_all", "overall"]
 
     counts: dict[str, dict[str, Any]] = {
         b: {"tp": 0, "fp": 0, "fn": 0, "num_gt": 0, "num_frames": len(frame_records)}
@@ -209,6 +329,12 @@ def evaluate_split_metrics(
     gts_by_frame_and_band: dict[str, dict[str, int]] = {
         r["frame_id"]: {b: 0 for b in bands_list} for r in frame_records
     }
+
+    optics_cfg = CameraOpticsConfig(
+        fov_long_deg=fov_deg,
+        car_length_m=car_length_m,
+        estimation_method=method,  # type: ignore[arg-type]
+    )
 
     for record in frame_records:
         fid = record["frame_id"]
@@ -226,27 +352,41 @@ def evaluate_split_metrics(
             gt_boxes, all_preds, w, h, iou_threshold, fov_deg, car_length_m, method
         )
 
+        # 1. Process True Positives at conf >= conf_threshold
         for tp in res_filtered["matched_tps"]:
             b = tp["gt_band"]
             if b in counts:
                 counts[b]["tp"] += 1
                 tps_by_frame_and_band[fid][b] += 1
-            counts["overall"]["tp"] += 1
-            tps_by_frame_and_band[fid]["overall"] += 1
+            if b in ("0-200m", "200-400m"):
+                counts["overall_0_400m"]["tp"] += 1
+                counts["overall"]["tp"] += 1
+                tps_by_frame_and_band[fid]["overall_0_400m"] += 1
+                tps_by_frame_and_band[fid]["overall"] += 1
+            counts["overall_all"]["tp"] += 1
+            tps_by_frame_and_band[fid]["overall_all"] += 1
 
+        # 2. Process False Positives at conf >= conf_threshold
         for fp in res_filtered["fps"]:
             b = fp["band"]
             if b in counts:
                 counts[b]["fp"] += 1
-            counts["overall"]["fp"] += 1
+            if b in ("0-200m", "200-400m"):
+                counts["overall_0_400m"]["fp"] += 1
+                counts["overall"]["fp"] += 1
+            counts["overall_all"]["fp"] += 1
 
+        # 3. Process False Negatives at conf >= conf_threshold
         for fn in res_filtered["fns"]:
             b = fn["band"]
             if b in counts:
                 counts[b]["fn"] += 1
-            counts["overall"]["fn"] += 1
+            if b in ("0-200m", "200-400m"):
+                counts["overall_0_400m"]["fn"] += 1
+                counts["overall"]["fn"] += 1
+            counts["overall_all"]["fn"] += 1
 
-        optics_cfg = CameraOpticsConfig(fov_long_deg=fov_deg, car_length_m=car_length_m, estimation_method=method)  # type: ignore[arg-type]
+        # 4. Count Ground Truth boxes
         for g in gt_boxes:
             box_w = max(0.0, g[2] - g[0])
             box_h = max(0.0, g[3] - g[1])
@@ -255,17 +395,28 @@ def evaluate_split_metrics(
             if b in counts:
                 counts[b]["num_gt"] += 1
                 gts_by_frame_and_band[fid][b] += 1
-            counts["overall"]["num_gt"] += 1
-            gts_by_frame_and_band[fid]["overall"] += 1
+            if b in ("0-200m", "200-400m"):
+                counts["overall_0_400m"]["num_gt"] += 1
+                counts["overall"]["num_gt"] += 1
+                gts_by_frame_and_band[fid]["overall_0_400m"] += 1
+                gts_by_frame_and_band[fid]["overall"] += 1
+            counts["overall_all"]["num_gt"] += 1
+            gts_by_frame_and_band[fid]["overall_all"] += 1
 
+        # 5. Populate PR curves across all candidate predictions
         for tp in res_all["matched_tps"]:
             b = tp["gt_band"]
             conf = tp["conf"]
             if b in ap_pool:
                 ap_pool[b]["tp_flags"].append(1)
                 ap_pool[b]["confs"].append(conf)
-            ap_pool["overall"]["tp_flags"].append(1)
-            ap_pool["overall"]["confs"].append(conf)
+            if b in ("0-200m", "200-400m"):
+                ap_pool["overall_0_400m"]["tp_flags"].append(1)
+                ap_pool["overall_0_400m"]["confs"].append(conf)
+                ap_pool["overall"]["tp_flags"].append(1)
+                ap_pool["overall"]["confs"].append(conf)
+            ap_pool["overall_all"]["tp_flags"].append(1)
+            ap_pool["overall_all"]["confs"].append(conf)
 
         for fp in res_all["fps"]:
             b = fp["band"]
@@ -273,24 +424,33 @@ def evaluate_split_metrics(
             if b in ap_pool:
                 ap_pool[b]["tp_flags"].append(0)
                 ap_pool[b]["confs"].append(conf)
-            ap_pool["overall"]["tp_flags"].append(0)
-            ap_pool["overall"]["confs"].append(conf)
+            if b in ("0-200m", "200-400m"):
+                ap_pool["overall_0_400m"]["tp_flags"].append(0)
+                ap_pool["overall_0_400m"]["confs"].append(conf)
+                ap_pool["overall"]["tp_flags"].append(0)
+                ap_pool["overall"]["confs"].append(conf)
+            ap_pool["overall_all"]["tp_flags"].append(0)
+            ap_pool["overall_all"]["confs"].append(conf)
 
     for b in bands_list:
         ap_pool[b]["total_gt"] = counts[b]["num_gt"]
 
-    # Calculate Time to First Detection per video clip and average
+    # Calculate Time to First Detection per video clip
     videos_map: dict[str, list[dict[str, Any]]] = {}
     for r in frame_records:
         vid = str(r["video_id"])
         videos_map.setdefault(vid, []).append(r)
 
-    ttfd_results: dict[str, dict[str, Any]] = {b: {"mean_s": None, "per_video": {}} for b in bands_list}
+    ttfd_results: dict[str, dict[str, Any]] = {
+        b: {"mean_s": None, "per_video": {}} for b in bands_list
+    }
 
     for b in bands_list:
         clip_delays: list[float] = []
         for vid, records in videos_map.items():
-            sorted_rec = sorted(records, key=lambda x: float(x.get("timestamp_sec", x.get("timestamp_s", 0.0))))
+            sorted_rec = sorted(
+                records, key=lambda x: float(x.get("timestamp_sec", x.get("timestamp_s", 0.0)))
+            )
             first_gt_ts = None
             first_tp_ts = None
 
@@ -299,23 +459,37 @@ def evaluate_split_metrics(
                 fid = r["frame_id"]
                 if first_gt_ts is None and gts_by_frame_and_band[fid][b] > 0:
                     first_gt_ts = ts
-                if first_gt_ts is not None and first_tp_ts is None and tps_by_frame_and_band[fid][b] > 0:
+                if first_tp_ts is None and tps_by_frame_and_band[fid][b] > 0:
                     first_tp_ts = ts
+                if first_gt_ts is not None and first_tp_ts is not None:
+                    break
 
             if first_gt_ts is not None:
                 if first_tp_ts is not None:
-                    delay = max(0.0, first_tp_ts - first_gt_ts) + mean_inference_latency_s
-                    clip_delays.append(delay)
-                    ttfd_results[b]["per_video"][vid] = round(delay, 3)
+                    # Delay in seconds from appearance to detection
+                    delay_s = max(0.0, first_tp_ts - first_gt_ts) + mean_inference_latency_s
+                    clip_delays.append(delay_s)
+                    ttfd_results[b]["per_video"][vid] = {
+                        "delay_s": round(delay_s, 3),
+                        "first_gt_ts": round(first_gt_ts, 3),
+                        "first_tp_ts": round(first_tp_ts, 3),
+                        "detected": True,
+                    }
                 else:
-                    ttfd_results[b]["per_video"][vid] = None
-            else:
-                ttfd_results[b]["per_video"][vid] = None
+                    ttfd_results[b]["per_video"][vid] = {
+                        "delay_s": None,
+                        "first_gt_ts": round(first_gt_ts, 3),
+                        "first_tp_ts": None,
+                        "detected": False,
+                    }
 
         if clip_delays:
             ttfd_results[b]["mean_s"] = round(float(np.mean(clip_delays)), 3)
 
     final_bands_metrics: dict[str, Any] = {}
+    total_frames = len(frame_records)
+    total_duration_min = (total_frames / float(fps)) / 60.0 if fps > 0 and total_frames > 0 else 1.0
+
     for b in bands_list:
         tp = counts[b]["tp"]
         fp = counts[b]["fp"]
@@ -323,11 +497,11 @@ def evaluate_split_metrics(
         n_gt = counts[b]["num_gt"]
         n_frames = counts[b]["num_frames"]
 
-        det_rate = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        prec = tp / (tp + fp) if (tp + fp) > 0 else (1.0 if fn == 0 and tp == 0 else 0.0)
-        f1 = (2.0 * tp / (2.0 * tp + fp + fn)) if (2.0 * tp + fp + fn) > 0 else 0.0
-        fa_per_min = (fp * 60.0 * fps / float(n_frames)) if n_frames > 0 else 0.0
+        det_rate = tp / float(tp + fn) if (tp + fn) > 0 else (1.0 if n_gt == 0 else 0.0)
+        prec = tp / float(tp + fp) if (tp + fp) > 0 else 0.0
+        f1 = (2.0 * prec * det_rate) / (prec + det_rate) if (prec + det_rate) > 0 else 0.0
 
+        fa_per_min = fp / total_duration_min if total_duration_min > 0 else 0.0
         ap = compute_ap50(ap_pool[b]["tp_flags"], ap_pool[b]["confs"], ap_pool[b]["total_gt"])
 
         final_bands_metrics[b] = {
@@ -360,11 +534,11 @@ def calibrate_confidence_threshold(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """
-    Calibrates confidence threshold tau* maximizing J(tau) = 0.5 * F1_overall + 0.5 * F1_macro.
+    Calibrates confidence threshold tau* maximizing J(tau) = 0.5 * (F1_0_200m + F1_200_400m).
     Tie-breaking favors higher tau to suppress false alarms.
     """
     if candidate_thresholds is None:
-        candidate_thresholds = [round(0.10 + 0.01 * i, 2) for i in range(76)]
+        candidate_thresholds = [round(0.10 + 0.05 * i, 2) for i in range(16)]  # 0.10 .. 0.85
 
     best_score = -1.0
     best_tau = 0.25
@@ -379,14 +553,18 @@ def calibrate_confidence_threshold(
             **kwargs,
         )
         bands = m["bands"]
-        f1_overall = bands["overall"]["f1"]
 
-        valid_band_f1s = [
-            bands[b]["f1"] for b in ("0-200m", "200-400m") if bands[b]["num_gt"] > 0
-        ]
-        f1_macro = float(np.mean(valid_band_f1s)) if valid_band_f1s else f1_overall
+        f1_near = bands["0-200m"]["f1"]
+        f1_far = bands["200-400m"]["f1"]
 
-        score = 0.5 * f1_overall + 0.5 * f1_macro
+        valid_f1s = []
+        if bands["0-200m"]["num_gt"] > 0:
+            valid_f1s.append(f1_near)
+        if bands["200-400m"]["num_gt"] > 0:
+            valid_f1s.append(f1_far)
+
+        macro_f1 = float(np.mean(valid_f1s)) if valid_f1s else bands["overall"]["f1"]
+        score = macro_f1
 
         if score > best_score or (abs(score - best_score) < 1e-6 and tau > best_tau):
             best_score = score

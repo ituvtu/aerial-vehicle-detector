@@ -1,5 +1,5 @@
 {
-  "active_curated_version": "v001_raw_20261104T184015Z_8630536e",
+  "active_curated_version": "v002_curated_20261104T211538Z_174a4443",
   "active_raw_version": "v001_raw_20261104T184015Z_8630536e",
   "schema_version": "1.0",
   "versions": [
@@ -22,6 +22,26 @@
       "total_boxes": 3156,
       "tree_sha256": "8630536e5aa6e54e165d0da8f2cc7e073990043baa175a1793ed3622231fccc9",
       "version_id": "v001_raw_20261104T184015Z_8630536e"
+    },
+    {
+      "created_at_utc": "20261104T211538Z",
+      "kind": "curated",
+      "num_frames": 155,
+      "parent_raw_version_id": "v001_raw_20261104T184015Z_8630536e",
+      "parent_version_id": null,
+      "rule2_summary": {
+        "added": 513,
+        "corrected_total": 2936,
+        "fixed": 136,
+        "raw_total": 3156,
+        "removed": 733,
+        "unchanged": 2287
+      },
+      "seq": 2,
+      "short_hash": "174a4443",
+      "total_boxes": 2936,
+      "tree_sha256": "174a444301ccc4dd1c475123913353adc9ad8b03e18b2b0d2f385a4acfdb1a1c",
+      "version_id": "v002_curated_20261104T211538Z_174a4443"
     }
   ]
 }

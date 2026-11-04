@@ -33,7 +33,11 @@ data/raw_videos/
 
 # CVAT local working directories & artifacts
 data/cvat/
+data/cvat/backups/
 artifacts/*.zip
+colab_results_bundle*.zip
+results/*.mp4
+results/evaluations/**/*.mp4
 
 # Ultralytics artifacts & caches
 runs/
