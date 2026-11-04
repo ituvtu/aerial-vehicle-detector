@@ -192,13 +192,13 @@ def run_inference_on_crop(
     """Запускає інференс YOLOE на одному зображенні/тайлі та повертає (boxes_xyxy, scores)."""
     import torch
 
-    use_half = torch.cuda.is_available()
+    quantize_val = 16 if torch.cuda.is_available() else None
     results = model.predict(
         source=img_bgr,
         imgsz=imgsz,
         conf=conf,
         iou=iou,
-        half=use_half,
+        quantize=quantize_val,
         agnostic_nms=True,
         retina_masks=False,
         verbose=False,
@@ -280,8 +280,13 @@ def load_yoloe_model(weights_name: str, prompt_classes: list[str]) -> Any:
     Без тихого fallback: якщо YOLOE API недоступний — RuntimeError.
     """
     import gc
+    import warnings
 
     import torch
+
+    # Suppress verbose deprecation warnings from nested dependencies
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", message=".*'half' is deprecated.*")
 
     err_msg = "YOLOE open-vocabulary API requires ultralytics>=8.4.0"
     try:
