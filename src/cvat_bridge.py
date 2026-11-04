@@ -202,10 +202,10 @@ def register_snapshot(
     import sys
 
     mod_name = "scripts_03_audit_labels"
-    if mod_name in sys.modules:
+    if mod_name in sys.modules and hasattr(sys.modules[mod_name], "run_dataset_audit"):
         audit_mod = sys.modules[mod_name]
     else:
-        root_dir = registry_dir.parents[1] if len(registry_dir.parents) >= 2 else Path.cwd()
+        root_dir = Path(__file__).resolve().parents[1]
         script_path = root_dir / "scripts" / "03_audit_labels.py"
         spec = importlib.util.spec_from_file_location(mod_name, script_path)
         if spec is None or spec.loader is None:

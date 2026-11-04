@@ -131,6 +131,7 @@ def cmd_import_to_cvat(args: argparse.Namespace) -> None:
     labels_json = json.dumps([{"name": "vehicle"}])
     create_cmd = [
         *cli_base,
+        "--insecure",
         "--server-host", args.server_host,
         "--server-port", str(args.server_port),
         "--auth", auth,
@@ -142,7 +143,16 @@ def cmd_import_to_cvat(args: argparse.Namespace) -> None:
         *image_paths,
     ]
     print(f"[CVAT CLI] Creating task '{args.task_name}' on {server_url} ...")
-    res = subprocess.run(create_cmd, capture_output=True, text=True, check=True)
+    try:
+        res = subprocess.run(create_cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        print(f"\n[CVAT CLI ERROR] Failed to create task:")
+        if exc.stdout:
+            print("STDOUT:", exc.stdout)
+        if exc.stderr:
+            print("STDERR:", exc.stderr)
+        raise
+
     task_id_str = res.stdout.strip().splitlines()[-1]
     task_id = int("".join(filter(str.isdigit, task_id_str)))
 
@@ -159,6 +169,7 @@ def cmd_import_to_cvat(args: argparse.Namespace) -> None:
 
     import_cmd = [
         *cli_base,
+        "--insecure",
         "--server-host", args.server_host,
         "--server-port", str(args.server_port),
         "--auth", auth,
@@ -167,7 +178,15 @@ def cmd_import_to_cvat(args: argparse.Namespace) -> None:
         "--format", "YOLO 1.1",
     ]
     print(f"[CVAT CLI] Importing initial raw labels into task {task_id} ...")
-    subprocess.run(import_cmd, check=True)
+    try:
+        subprocess.run(import_cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        print(f"\n[CVAT CLI ERROR] Failed to import dataset into task {task_id}:")
+        if exc.stdout:
+            print("STDOUT:", exc.stdout)
+        if exc.stderr:
+            print("STDERR:", exc.stderr)
+        raise
     print(f"[CVAT CLI] Setup complete! Open: {args.server_host}:{args.server_port}/tasks/{task_id}")
 
 
@@ -206,6 +225,7 @@ def cmd_pull_from_cvat(args: argparse.Namespace) -> None:
         cli_base = _get_cvat_cli_cmd()
         export_cmd = [
             *cli_base,
+            "--insecure",
             "--server-host", server_host,
             "--server-port", str(server_port),
             "--auth", auth,
@@ -215,7 +235,15 @@ def cmd_pull_from_cvat(args: argparse.Namespace) -> None:
             "--with-images", "no",
         ]
         print(f"[CVAT CLI] Exporting annotations for task {task_id} ...")
-        subprocess.run(export_cmd, check=True)
+        try:
+            subprocess.run(export_cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            print(f"\n[CVAT CLI ERROR] Failed to export dataset from task {task_id}:")
+            if exc.stdout:
+                print("STDOUT:", exc.stdout)
+            if exc.stderr:
+                print("STDERR:", exc.stderr)
+            raise
 
         if not args.no_backup_task:
             backups_dir = cvat_dir / "backups"
@@ -223,6 +251,7 @@ def cmd_pull_from_cvat(args: argparse.Namespace) -> None:
             backup_zip = backups_dir / f"cvat_backup_task{task_id}.zip"
             backup_cmd = [
                 *cli_base,
+                "--insecure",
                 "--server-host", server_host,
                 "--server-port", str(server_port),
                 "--auth", auth,
@@ -230,7 +259,15 @@ def cmd_pull_from_cvat(args: argparse.Namespace) -> None:
                 str(backup_zip.resolve()),
             ]
             print(f"[CVAT CLI] Creating task backup: {backup_zip} ...")
-            subprocess.run(backup_cmd, check=True)
+            try:
+                subprocess.run(backup_cmd, capture_output=True, text=True, check=True)
+            except subprocess.CalledProcessError as exc:
+                print(f"\n[CVAT CLI ERROR] Failed to backup task {task_id}:")
+                if exc.stdout:
+                    print("STDOUT:", exc.stdout)
+                if exc.stderr:
+                    print("STDERR:", exc.stderr)
+                raise
 
     result = import_yolo_1_1_from_cvat(
         cvat_zip_path=export_zip,
