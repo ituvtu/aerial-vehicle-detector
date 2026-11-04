@@ -513,7 +513,7 @@ def main() -> None:
     md_lines = [
         "# Ablation Study Comparison on Validation Split (Rule 1 & Rule 6)",
         "",
-        f"**Dataset Snapshot**: `{snapshot_id}` | **Validation Frames**: {len(val_records)} | **Metric**: $J = 0.5 \\cdot \\text{Macro-F1} + 0.5 \\cdot \\text{mAP@0.5}$",
+        f"**Dataset Snapshot**: `{snapshot_id}` | **Validation Frames**: {len(val_records)} | **Metric**: $J = 0.5 \\cdot \\text{{Macro-F1}} + 0.5 \\cdot \\text{{mAP@0.5}}$",
         "",
         "| Experiment | Model ID | Rect Mode | Mosaic | $\\tau^*$ | Val F1 (0–200m) | Val F1 (200–400m) | Val Macro-F1 | Val mAP@0.5 | Selection Score | Status |",
         "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
