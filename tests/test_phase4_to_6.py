@@ -31,6 +31,7 @@ from src.metrics import (
     evaluate_split_metrics,
     inspect_and_verify_architecture,
     match_frame_detections,
+    transfer_coco_stem_weights,
 )
 from src.model_registry import ModelRegistry, compute_file_sha256
 
@@ -41,6 +42,10 @@ plot_ablation_comparison_curves = train_mod.plot_ablation_comparison_curves
 eval_mod = importlib.import_module("scripts.05_evaluate")
 letterbox_to_canvas = eval_mod.letterbox_to_canvas
 draw_hud_banner = eval_mod.draw_hud_banner
+
+neg_mod = importlib.import_module("scripts.03b_generate_hard_negatives")
+check_box_overlap = neg_mod.check_box_overlap
+generate_hard_negatives = neg_mod.generate_hard_negatives
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -430,3 +435,92 @@ with patch('src.metrics.audit_model_architecture') as mock_audit, \\
     assert "200-400m" in eval_data["bands"]
     assert "overall_0_400m" in eval_data["bands"]
     assert "latency_benchmark" in eval_data
+
+
+def test_transfer_coco_stem_weights():
+    from ultralytics import YOLO
+
+    model = YOLO("configs/yolo26_pico_p2.yaml")
+    info = transfer_coco_stem_weights(model, weights_path="yolo26n.pt")
+
+    assert info["matched_tensors"] == 46
+    assert info["transferred_params"] == 49243
+    assert info["layers"] == "model.0..model.4"
+
+
+def test_check_box_overlap_unit():
+    gt_boxes = [(100.0, 100.0, 200.0, 200.0)]
+
+    # Disjoint crop
+    assert check_box_overlap(300, 300, 500, 500, gt_boxes, margin=10) is False
+
+    # Overlapping crop
+    assert check_box_overlap(150, 150, 350, 350, gt_boxes, margin=10) is True
+
+    # Near crop within margin (distance 5px < margin 10px)
+    assert check_box_overlap(205, 205, 400, 400, gt_boxes, margin=10) is True
+
+    # Safe distance outside margin
+    assert check_box_overlap(215, 215, 400, 400, gt_boxes, margin=10) is False
+
+
+def test_generate_hard_negatives_zero_overlap(tmp_path: Path):
+    out_img = tmp_path / "images_negatives"
+    out_lbl = tmp_path / "labels_negatives"
+    out_split = tmp_path / "train_with_negatives.txt"
+    out_yaml = tmp_path / "dataset_with_negatives.yaml"
+
+    records = generate_hard_negatives(
+        manifest_path=PROJECT_ROOT / "data" / "manifest.csv",
+        labels_dir=PROJECT_ROOT / "data" / "labels",
+        images_dir=PROJECT_ROOT / "data" / "images",
+        output_images_dir=out_img,
+        output_labels_dir=out_lbl,
+        output_split_file=out_split,
+        output_yaml=out_yaml,
+        max_negatives=4,
+        crop_size=1024,
+        stride=512,
+    )
+
+    assert len(records) == 4
+    for r in records:
+        img_p = PROJECT_ROOT / r["image_path"]
+        assert img_p.exists()
+        # Label file must exist and have 0 bytes (pure background)
+        lbl_p = out_lbl / f"{r['crop_id']}.txt"
+        assert lbl_p.exists()
+        assert lbl_p.stat().st_size == 0
+
+    assert out_split.exists()
+    assert out_yaml.exists()
+    import yaml
+    with open(out_yaml, "r", encoding="utf-8") as f:
+        y_data = yaml.safe_load(f)
+    assert y_data["nc"] == 1
+    assert y_data["val"] == "data/splits/val.txt"
+    assert y_data["test"] == "data/splits/test.txt"
+
+
+def test_train_cli_modes_backward_compatibility():
+    # Dry run with old mode exp1_mosaic
+    cmd1 = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "04_train.py"),
+        "--dry-run",
+        "--mode", "exp1_mosaic",
+    ]
+    res1 = subprocess.run(cmd1, capture_output=True, text=True, check=True)
+    assert res1.returncode == 0
+
+    # Dry run with new mode exp3_pretrained
+    cmd2 = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "04_train.py"),
+        "--dry-run",
+        "--mode", "exp3_pretrained",
+        "--pretrained-stem",
+    ]
+    res2 = subprocess.run(cmd2, capture_output=True, text=True, check=True)
+    assert res2.returncode == 0
+

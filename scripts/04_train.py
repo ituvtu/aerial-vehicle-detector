@@ -43,6 +43,7 @@ from src.metrics import (
     calibrate_confidence_threshold,
     evaluate_split_metrics,
     inspect_and_verify_architecture,
+    transfer_coco_stem_weights,
 )
 from src.model_registry import ModelRegistry
 
@@ -245,6 +246,7 @@ def train_single_experiment(
     weights_dir: Path,
     results_dir: Path,
     exp_opts: dict[str, Any],
+    pretrained_stem: bool = False,
 ) -> Path:
     """Trains a single model experiment and returns path to its best.pt."""
     from ultralytics import YOLO
@@ -253,11 +255,17 @@ def train_single_experiment(
     model = YOLO(str(arch_yaml))
 
     # Pretrained stem transfer
-    try:
-        model.load("yolo26n.pt")
-        print("[Pretrained Transfer] Transferred stem weights from yolo26n.pt")
-    except Exception as exc:
-        print(f"[Pretrained Transfer] Starting from scratch ({exc})")
+    if pretrained_stem:
+        try:
+            transfer_coco_stem_weights(model, weights_path="yolo26n.pt")
+        except Exception as exc:
+            print(f"[Pretrained Transfer] Failed deterministic transfer: {exc}")
+    else:
+        try:
+            model.load("yolo26n.pt")
+            print("[Pretrained Transfer] Transferred stem weights from yolo26n.pt")
+        except Exception as exc:
+            print(f"[Pretrained Transfer] Starting from scratch ({exc})")
 
     train_args = {
         "data": str(data_yaml.resolve()),
@@ -320,12 +328,24 @@ def train_single_experiment(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train YOLO26-Pico-P2 & Validation Threshold Calibration.")
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "configs" / "project_config.yaml")
-    parser.add_argument("--mode", type=str, choices=["ablation", "exp1_mosaic", "exp2_rect_nomosaic"], default="ablation")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["ablation", "exp1_mosaic", "exp2_rect_nomosaic", "exp3_pretrained", "exp4_pretrained_negatives"],
+        default="ablation",
+    )
+    parser.add_argument("--pretrained-stem", action="store_true", help="Transfer pretrained COCO stem/backbone weights")
+    parser.add_argument("--data", type=Path, default=None, help="Override path to dataset YAML")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch", type=int, default=None)
     parser.add_argument("--imgsz", type=int, default=1024)
     parser.add_argument("--device", type=str, default="")
-    parser.add_argument("--force-winner", type=str, default=None, choices=["exp1_mosaic", "exp2_rect_nomosaic"])
+    parser.add_argument(
+        "--force-winner",
+        type=str,
+        default=None,
+        choices=["exp1_mosaic", "exp2_rect_nomosaic", "exp3_pretrained", "exp4_pretrained_negatives"],
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--list-models", action="store_true", help="List registered models in weights/registry/")
     parser.add_argument("--promote-model", type=str, default=None, help="Promote specific model_id (e.g. m001)")
@@ -386,12 +406,20 @@ def main() -> None:
         print("[Dry-Run] Architecture and splits verified successfully. Exiting clean.")
         return
 
-    # 4. Define Experiments
+    # 4. Define Experiments & Dataset YAML
     t_cfg = cfg.get("training", {})
     epochs = args.epochs or int(t_cfg.get("epochs", 150))
     batch = args.batch or int(t_cfg.get("batch_size", 8))
     imgsz = args.imgsz or int(t_cfg.get("imgsz", 1024))
-    data_yaml = PROJECT_ROOT / cfg["paths"]["dataset_yaml"]
+
+    if args.data is not None:
+        data_yaml = args.data if args.data.is_absolute() else PROJECT_ROOT / args.data
+    elif args.mode == "exp4_pretrained_negatives":
+        data_yaml = PROJECT_ROOT / "data" / "dataset_with_negatives.yaml"
+    else:
+        data_yaml = PROJECT_ROOT / cfg["paths"]["dataset_yaml"]
+
+    use_pretrained_stem = bool(args.pretrained_stem or (args.mode in ("exp3_pretrained", "exp4_pretrained_negatives")))
 
     experiments: dict[str, dict[str, Any]] = {}
     if args.mode in ("ablation", "exp1_mosaic"):
@@ -407,6 +435,20 @@ def main() -> None:
             "mosaic": 0.0,
             "close_mosaic": 0,
             "scale": 0.25,
+        }
+    if args.mode == "exp3_pretrained":
+        experiments["exp3_pretrained"] = {
+            "rect": False,
+            "mosaic": 1.0,
+            "close_mosaic": 25,
+            "scale": 0.5,
+        }
+    if args.mode == "exp4_pretrained_negatives":
+        experiments["exp4_pretrained_negatives"] = {
+            "rect": False,
+            "mosaic": 1.0,
+            "close_mosaic": 25,
+            "scale": 0.5,
         }
 
     # Load active curated ledger info for provenance
@@ -438,6 +480,7 @@ def main() -> None:
             weights_dir=weights_dir,
             results_dir=results_dir,
             exp_opts=exp_opts,
+            pretrained_stem=use_pretrained_stem,
         )
 
         # Calibrate strictly on val

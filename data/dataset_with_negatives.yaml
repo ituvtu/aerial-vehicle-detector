@@ -1,0 +1,7 @@
+path: .
+train: data/splits/train_with_negatives.txt
+val: data/splits/val.txt
+test: data/splits/test.txt
+nc: 1
+names:
+  0: vehicle

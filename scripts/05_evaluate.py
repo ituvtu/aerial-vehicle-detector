@@ -122,9 +122,21 @@ def main() -> None:
     # 1. Resolve model checkpoint & calibration via ModelRegistry
     registry = ModelRegistry(PROJECT_ROOT / "weights")
     if args.weights is not None:
-        weights_path = Path(args.weights)
-        calib_file = Path(args.calibration) if args.calibration else PROJECT_ROOT / "weights" / "calibration_val.json"
-        model_id = args.model_id or "custom_weights"
+        raw_p = str(args.weights)
+        if "*" in raw_p:
+            matches = list(PROJECT_ROOT.glob(raw_p)) if not Path(raw_p).is_absolute() else list(Path("/").glob(raw_p.lstrip("/")))
+            weights_path = matches[0] if matches else Path(args.weights)
+        else:
+            weights_path = Path(args.weights) if Path(args.weights).is_absolute() else PROJECT_ROOT / args.weights
+
+        if args.calibration:
+            calib_file = Path(args.calibration)
+        elif (weights_path.parent / "calibration_val.json").exists():
+            calib_file = weights_path.parent / "calibration_val.json"
+        else:
+            calib_file = PROJECT_ROOT / "weights" / "calibration_val.json"
+
+        model_id = args.model_id or (weights_path.parent.name.split("_")[0] if weights_path.parent.name.startswith("m") else "custom_weights")
         from src.model_registry import compute_file_sha256
         weights_sha = compute_file_sha256(weights_path) if weights_path.exists() else "unknown"
     else:

@@ -164,6 +164,40 @@ def inspect_and_verify_architecture(
     return report
 
 
+def transfer_coco_stem_weights(model: Any, weights_path: str = "yolo26n.pt") -> dict[str, Any]:
+    """
+    Deterministically transfers COCO pretrained weights from yolo26n.pt into compatible
+    Pico-P2 stem and backbone layers (model.0..model.4: stem convolutions and C3k2 blocks).
+    Validates strict tensor shape equality before loading.
+    """
+    from ultralytics import YOLO
+
+    src_model = YOLO(weights_path)
+    src_state = src_model.model.state_dict()
+    target_state = model.model.state_dict()
+
+    matched = {}
+    transferred_params = 0
+    for k, v in src_state.items():
+        if k in target_state and v.shape == target_state[k].shape:
+            if any(k.startswith(f"model.{i}.") for i in range(5)):
+                matched[k] = v
+                transferred_params += v.numel()
+
+    model.model.load_state_dict(matched, strict=False)
+    print(
+        f"[Pretrained Transfer] Successfully transferred {len(matched)} tensors "
+        f"({transferred_params:,} params) from {weights_path} into Pico-P2 backbone (layers 0..4)."
+    )
+    return {
+        "source_weights": weights_path,
+        "matched_tensors": len(matched),
+        "transferred_params": transferred_params,
+        "layers": "model.0..model.4",
+    }
+
+
+
 def compute_box_iou(box1: tuple[float, float, float, float], box2: tuple[float, float, float, float]) -> float:
     """Computes IoU between two xyxy bounding boxes."""
     x1 = max(box1[0], box2[0])
