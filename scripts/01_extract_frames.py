@@ -123,9 +123,15 @@ def extract_video_frames(
         native_fps=native_fps,
         target_fps=target_fps,
     )
+    is_eval_cfg = (
+        bool(video_meta.get("is_eval", False))
+        or video_meta.get("split") == "test"
+        or str(video_meta.get("role", "")).startswith("eval")
+        or str(video_id) in ("32179597", "13763017")
+    )
     splits = assign_temporal_splits(
         num_frames=len(samples),
-        is_eval_video=bool(video_meta["is_eval"]),
+        is_eval_video=is_eval_cfg,
         train_ratio=train_ratio,
     )
 
@@ -256,8 +262,8 @@ def print_dataset_and_optics_summary(df: pd.DataFrame, cfg: dict[str, Any]) -> N
         orientation = "VERTICAL 9:16" if h > w else "HORIZONTAL 16:9"
         print(
             f"  Resolution {w}x{h} ({orientation}) | f_px = {f_px:.1f} px:\n"
-            f"    @ 200m boundary -> car box ≈ {l_200:.1f} x {w_200:.1f} px\n"
-            f"    @ 400m boundary -> car box ≈ {l_400:.1f} x {w_400:.1f} px"
+            f"    @ 200m boundary -> car box ~ {l_200:.1f} x {w_200:.1f} px\n"
+            f"    @ 400m boundary -> car box ~ {l_400:.1f} x {w_400:.1f} px"
         )
     print("=" * 78 + "\n")
 

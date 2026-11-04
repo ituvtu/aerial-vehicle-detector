@@ -192,6 +192,32 @@ class TestManifestRule1Guard:
         with pytest.raises(ValueError, match="Rule 1 violation"):
             save_manifest(df, tmp_path / "m.csv")
 
+    def test_second_eval_clip_13763017_is_strictly_enforced_in_test(self, tmp_path: Path) -> None:
+        df = pd.DataFrame(
+            [
+                _row("111_f00000", "111", "train_A", "train"),
+                _row("32179597_f00000", "32179597", "eval", "test", 2160, 3840),
+                _row("13763017_f00000", "13763017", "eval_B", "test", 3840, 2160),
+            ]
+        )
+        # Valid save
+        save_manifest(df, tmp_path / "valid.csv")
+        loaded = load_manifest(tmp_path / "valid.csv")
+        assert len(loaded) == 3
+        assert (loaded[loaded["video_id"] == "13763017"]["split"] == "test").all()
+
+        # Reject moving 13763017 to val or train
+        df_invalid = df.copy()
+        df_invalid.loc[df_invalid["video_id"] == "13763017", "split"] = "val"
+        with pytest.raises(ValueError, match="Rule 1 violation"):
+            save_manifest(df_invalid, tmp_path / "invalid.csv")
+
+        # Reject changing role away from eval while in test
+        df_invalid2 = df.copy()
+        df_invalid2.loc[df_invalid2["video_id"] == "13763017", "role"] = "train_B"
+        with pytest.raises(ValueError, match="Rule 1 violation"):
+            save_manifest(df_invalid2, tmp_path / "invalid2.csv")
+
     def test_load_rejects_hand_edited_csv(self, tmp_path: Path) -> None:
         path = tmp_path / "m.csv"
         save_manifest(_two_frame_df(), path)

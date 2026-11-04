@@ -12,6 +12,7 @@ SplitName = Literal["train", "val", "test"]
 
 VALID_SPLITS: frozenset[str] = frozenset({"train", "val", "test"})
 EVAL_VIDEO_ID = "32179597"
+EVAL_VIDEO_IDS: frozenset[str] = frozenset({"32179597", "13763017"})
 EVAL_ROLE = "eval"
 
 MANIFEST_COLUMNS: list[str] = [
@@ -42,18 +43,33 @@ RULE1_ERROR = "Rule 1 violation: eval frames must stay isolated in 'test' split"
 
 def validate_rule1_isolation(df: pd.DataFrame) -> None:
     """
-    Запобіжник Rule 1: усі eval-кадри (role == 'eval' або video_id == 32179597) мають split == 'test',
-    жоден не-eval кадр не може бути у 'test'; дозволені лише split in {train, val, test}.
+    Rule 1 isolation guard:
+    - Every frame with video_id in EVAL_VIDEO_IDS (or role.startswith("eval")) MUST have split == "test" and role.startswith("eval").
+    - Every frame with split == "test" MUST have video_id in EVAL_VIDEO_IDS and role.startswith("eval").
+    - Every frame with video_id not in EVAL_VIDEO_IDS MUST have split in ("train", "val") and not role.startswith("eval").
     """
     splits = df["split"].astype(str).str.strip()
     bad_splits = sorted(set(splits) - VALID_SPLITS)
     if bad_splits:
         raise ValueError(f"Invalid split value(s) {bad_splits}; allowed: {sorted(VALID_SPLITS)}")
 
-    is_eval = (df["role"].astype(str).str.strip() == EVAL_ROLE) | (
-        df["video_id"].astype(str).str.strip() == EVAL_VIDEO_ID
-    )
-    if (splits[is_eval] != "test").any() or (splits[~is_eval] == "test").any():
+    roles = df["role"].astype(str).str.strip()
+    video_ids = df["video_id"].astype(str).str.strip()
+
+    is_eval_vid = video_ids.isin(EVAL_VIDEO_IDS)
+    is_eval_role = roles.str.startswith("eval")
+    is_eval = is_eval_vid | is_eval_role
+
+    # Check 1: All frames with role.startswith('eval') or known EVAL_VIDEO_IDS must have split == 'test'
+    if (splits[is_eval] != "test").any():
+        raise ValueError(RULE1_ERROR)
+
+    # Check 2: All test frames must have role.startswith('eval')
+    if (~is_eval_role[splits == "test"]).any():
+        raise ValueError(RULE1_ERROR)
+
+    # Check 3: Non-eval frames must have split in ('train', 'val') and cannot be in EVAL_VIDEO_IDS
+    if (splits[~is_eval_role].isin(["test"])).any() or (is_eval_vid[~is_eval_role]).any():
         raise ValueError(RULE1_ERROR)
 
 

@@ -44,6 +44,13 @@ videos:
     role: "eval"
     scene: "city highway, daytime"
     is_eval: true
+  "13763017":
+    filename: "13763017.mp4"
+    role: "eval_B"
+    scene: "highway traffic, high-angle oblique (200-400m coverage)"
+    url: "https://www.pexels.com/video/13763017"
+    is_eval: true
+    split: "test"
 
 extraction:
   target_fps: 1.0
