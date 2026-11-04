@@ -38,6 +38,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "cvat-cli" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -56,6 +57,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "cvat-cli", specifier = ">=2.81.0" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
 ]
@@ -71,6 +73,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a1/98/7e457a3b014976887a050561955c0b76e1e7e2d6e27b78ecef2ef80518f2/anyio-4.16.0.tar.gz", hash = "sha256:59bb03251907983d1603d27c3087ddb1e93299ea2163adcdba37899a4fb12ffb", size = 310971, upload-time = "2026-11-01T11:20:07.282Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/16/7757fb84c819accc7d7e9af5291b261e4abb8627ee040f99e7d35ef2457a/anyio-4.16.0-py3-none-any.whl", hash = "sha256:c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026", size = 134521, upload-time = "2026-11-01T11:20:05.59Z" },
+]
+
+[[package]]
+name = "attrs"
+version = "26.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055, upload-time = "2026-03-19T14:22:25.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
 ]
 
 [[package]]
@@ -624,6 +635,38 @@ nvtx = [
 ]
 
 [[package]]
+name = "cvat-cli"
+version = "2.81.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "cvat-sdk" },
+    { name = "json-with-comments" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b3/ae/296ef3ba5630dcc887304bbefb5ac84b651d903edc14aae1f0c30568dfc9/cvat_cli-2.81.0.tar.gz", hash = "sha256:0c878d2e9f29df4fd6e1ab99a1d4f02c52d709afb258ee7e1e0adb2889a054f0", size = 26807, upload-time = "2026-10-29T06:10:28.554Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/46/c48c4141f14b2fb423c45e2610e7d99266f4272368b85f7932503f0448e2/cvat_cli-2.81.0-py3-none-any.whl", hash = "sha256:02348e76b446c6459de3060ef3d8629289601d52274345dbca8e79fdc25c9eb2", size = 34972, upload-time = "2026-10-29T06:10:25.179Z" },
+]
+
+[[package]]
+name = "cvat-sdk"
+version = "2.81.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "packaging" },
+    { name = "pillow" },
+    { name = "platformdirs" },
+    { name = "tqdm" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/53/a4/865fa91e3c738e7b5c61f48a04a5bfd7a89c5013d245d77644794cfeb5e0/cvat_sdk-2.81.0.tar.gz", hash = "sha256:691280e43ab8d884431ff3430685f4e5732f57dc20f816ec711bbf0e52166b04", size = 294372, upload-time = "2026-10-29T06:10:29.705Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/47/b352e05b2e60d0b73457ef0498cb2fe64a4d3450d5cec5c1e40cf94aadac/cvat_sdk-2.81.0-py3-none-any.whl", hash = "sha256:cfaf1000fe57dfc5116f6595068c9050d71b13adc0834a1f7eb1be7e1af2e9d5", size = 985006, upload-time = "2026-10-29T06:10:26.721Z" },
+]
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -787,6 +830,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
+]
+
+[[package]]
+name = "json-with-comments"
+version = "1.2.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/6d/638e8adbb2b92bb0803c092dd8ae6482945961c8545fc7e2f21c48233928/json_with_comments-1.2.10.tar.gz", hash = "sha256:0020b321cf6c80963c85f95ce985e71332f1797ed49abfd1cd675b3bdee24a28", size = 6788, upload-time = "2024-12-10T05:46:37.415Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/8a/f67dadb0648f00ac2249d3ef32532f0d5a2e72016f8426290ce6fe575870/json_with_comments-1.2.10-py3-none-any.whl", hash = "sha256:d7989c2577b1f8cbba735209f8d388d21017feb42ef30c29c230040f86b42700", size = 6533, upload-time = "2024-12-10T05:46:34.856Z" },
 ]
 
 [[package]]
@@ -1689,6 +1741,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/ed/d504165ef79af6fafe25c76726cf30f544cc236002f7ed054f1d51adc4ff/pillow-13.0.0-pp312-pypy312_pp80-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:93ff9c9c3663ce23aaa5d0b6b6abac55359e2a0c06c7e30f3771829af816be63", size = 5464358, upload-time = "2026-10-16T22:18:02.779Z" },
     { url = "https://files.pythonhosted.org/packages/7b/fe/a10aba5503ca13e9e009b8bd0a1a4ce5584bdce246245fd6f3a83701369c/pillow-13.0.0-pp312-pypy312_pp80-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e65dd6e75de67b2362a4fa3e16aa627595f65054dc4ec73d64680c84d592fa61", size = 6043514, upload-time = "2026-10-16T22:18:04.538Z" },
     { url = "https://files.pythonhosted.org/packages/c0/37/66b12dc476041fe523bca29c9d58fbf1ea92a4eaf73acfb9e993948f1191/pillow-13.0.0-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:567f20f1c75897d7663830da6ea8af719e03d712b1d9ee7f813319f9ece42e5a", size = 7366030, upload-time = "2026-10-16T22:18:06.638Z" },
+]
+
+[[package]]
+name = "platformdirs"
+version = "4.14.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/9a/8475be631fb33ca1466915e70fd594c42a4e84b512db650eaa14f90fe75d/platformdirs-4.14.5.tar.gz", hash = "sha256:32e9921db7385aa8169bee4fe9501923e5715ba9fb7ea3b9c69b0d8e0639f7a1", size = 71464, upload-time = "2026-11-04T16:54:50.358Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/ae/ecbbbfd0e4343a6a521d49b3c8656fb4643dee2a4f6eaf941cf3280391a8/platformdirs-4.14.5-py3-none-any.whl", hash = "sha256:8e778c6fa421516f4d3369449f8df3b0e1b72c0e0005fe88e3ec772d0a14e750", size = 35402, upload-time = "2026-11-04T16:54:48.875Z" },
 ]
 
 [[package]]

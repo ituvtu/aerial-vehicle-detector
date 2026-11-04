@@ -7,35 +7,35 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 
 # Python & uv
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.venv/
 .pytest_cache/
 .ruff_cache/
-build/
-dist/
 
-# Службові файли ОС та IDE
+# OS / IDE
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.swp
+.env
 
-# Важкі сирі дані та нарізані кадри (синхронізуються через Google Drive)
+# Raw heavy media & working caches
 data/raw_videos/*.mp4
 data/raw_videos/*.mov
 data/raw_videos/*.avi
 data/images/*.jpg
 data/images/*.png
 data/*.zip
+data/images/
+data/raw_videos/
 
-# Проміжні артефакти навчання Ultralytics та кеші
+# CVAT local working directories & artifacts
+data/cvat/
+artifacts/*.zip
+
+# Ultralytics artifacts & caches
 runs/
 data/*.cache
 data/labels/*.cache
@@ -43,16 +43,25 @@ data/splits/*.cache
 *.onnx
 *.engine
 
-# Залишаємо у Git тільки фінальні ваги best.pt, ігноруємо проміжні чекпоїнти
+# Model weights: track best.pt and metadata json only
 weights/*.pt
 !weights/best.pt
+weights/*.json
+!weights/*.json
 yolo*.pt
 yoloe*.pt
-
 
 # Test / coverage artifacts and partial downloads
 .pytest_tmp/
 .coverage
 coverage.xml
 *.part
-data/audit_report.json
+
+# Explicitly tracked in Git (never ignore)
+!data/manifest.csv
+!data/splits/*.txt
+!data/registry/**
+!data/labels_raw/*.txt
+!data/labels_raw_lock.json
+!data/labels/*.txt
+!data/audit_report.json
