@@ -1,0 +1,11 @@
+{
+  "unfused_params": 478590,
+  "fused_params": 427567,
+  "max_params_limit": 500000,
+  "strides": [
+    4.0,
+    8.0,
+    16.0
+  ],
+  "num_layers": 22
+}

@@ -1,0 +1,41 @@
+# Ultralytics YOLO26 Pico-P2 architecture (<500k params) for Aerial Vehicle Detection
+# Strides: P2/4, P3/8, P4/16 (P5/32 removed; SPPF + C2PSA relocated to P4/16)
+
+nc: 1 # vehicle
+end2end: True # NMS-free dual-assignment training & top-k inference
+reg_max: 1 # DFL-free box regression
+scale: n # explicit default scale key
+scales:
+  # [depth, width, max_channels]
+  n: [0.50, 0.25, 384] # ~478.8k params unfused, ~428.5k params fused
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]]            # 0-P1/2 (16 ch)
+  - [-1, 1, Conv, [128, 3, 2]]           # 1-P2/4 (32 ch)
+  - [-1, 2, C3k2, [256, False, 0.25]]    # 2-P2/4 (64 ch)
+  - [-1, 1, Conv, [256, 3, 2]]           # 3-P3/8 (64 ch)
+  - [-1, 2, C3k2, [256, False, 0.25]]    # 4-P3/8 (64 ch)
+  - [-1, 1, Conv, [384, 3, 2]]           # 5-P4/16 (96 ch)
+  - [-1, 2, C3k2, [384, True]]           # 6-P4/16 (96 ch)
+  - [-1, 1, SPPF, [384, 5, 3, True]]     # 7-P4/16 (96 ch)
+  - [-1, 2, C2PSA, [384]]                # 8-P4/16 (96 ch)
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 9 (P4/16 -> P3/8)
+  - [[-1, 4], 1, Concat, [1]]                  # 10 cat backbone P3 (160 ch)
+  - [-1, 2, C3k2, [256, True]]                 # 11 (64 ch)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 12 (P3/8 -> P2/4)
+  - [[-1, 2], 1, Concat, [1]]                  # 13 cat backbone P2 (128 ch)
+  - [-1, 2, C3k2, [128, True]]                 # 14 (P2/4-tiny output, 32 ch)
+
+  - [-1, 1, Conv, [128, 3, 2]]                 # 15 (P2/4 -> P3/8, 32 ch)
+  - [[-1, 11], 1, Concat, [1]]                 # 16 cat head P3 (96 ch)
+  - [-1, 2, C3k2, [256, True]]                 # 17 (P3/8-small output, 64 ch)
+
+  - [-1, 1, Conv, [256, 3, 2]]                 # 18 (P3/8 -> P4/16, 64 ch)
+  - [[-1, 8], 1, Concat, [1]]                  # 19 cat backbone P4 context (160 ch)
+  - [-1, 2, C3k2, [384, True]]                 # 20 (P4/16-medium output, 96 ch)
+
+  - [[14, 17, 20], 1, Detect, [nc]]            # 21 Detect(P2, P3, P4)

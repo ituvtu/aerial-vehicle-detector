@@ -1,0 +1,27 @@
+{
+  "active_curated_version": "v001_raw_20261104T184015Z_8630536e",
+  "active_raw_version": "v001_raw_20261104T184015Z_8630536e",
+  "schema_version": "1.0",
+  "versions": [
+    {
+      "created_at_utc": "20261104T184015Z",
+      "kind": "raw",
+      "num_frames": 155,
+      "parent_raw_version_id": "v001_raw_20261104T184015Z_8630536e",
+      "parent_version_id": null,
+      "rule2_summary": {
+        "added": 0,
+        "corrected_total": 3156,
+        "fixed": 0,
+        "raw_total": 3156,
+        "removed": 0,
+        "unchanged": 3156
+      },
+      "seq": 1,
+      "short_hash": "8630536e",
+      "total_boxes": 3156,
+      "tree_sha256": "8630536e5aa6e54e165d0da8f2cc7e073990043baa175a1793ed3622231fccc9",
+      "version_id": "v001_raw_20261104T184015Z_8630536e"
+    }
+  ]
+}

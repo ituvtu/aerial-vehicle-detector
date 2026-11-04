@@ -1,0 +1,100 @@
+{
+  "total_active_frames": 155,
+  "rule2_label_correction_summary": {
+    "raw_total": 3156,
+    "corrected_total": 3156,
+    "unchanged": 3156,
+    "fixed": 0,
+    "removed": 0,
+    "added": 0
+  },
+  "rule2_by_split": {
+    "train": {
+      "raw_total": 1887,
+      "corrected_total": 1887,
+      "unchanged": 1887,
+      "fixed": 0,
+      "removed": 0,
+      "added": 0
+    },
+    "val": {
+      "raw_total": 445,
+      "corrected_total": 445,
+      "unchanged": 445,
+      "fixed": 0,
+      "removed": 0,
+      "added": 0
+    },
+    "test": {
+      "raw_total": 824,
+      "corrected_total": 824,
+      "unchanged": 824,
+      "fixed": 0,
+      "removed": 0,
+      "added": 0
+    }
+  },
+  "rule4_distance_bands_by_split": {
+    "train": {
+      "0-200m": 1184,
+      "200-400m": 620,
+      ">400m": 83,
+      "total": 1887
+    },
+    "val": {
+      "0-200m": 285,
+      "200-400m": 152,
+      ">400m": 8,
+      "total": 445
+    },
+    "test": {
+      "0-200m": 442,
+      "200-400m": 351,
+      ">400m": 31,
+      "total": 824
+    }
+  },
+  "rule4_distance_bands_by_role": {
+    "train_A": {
+      "0-200m": 29,
+      "200-400m": 460,
+      ">400m": 35,
+      "total": 524
+    },
+    "train_B": {
+      "0-200m": 149,
+      "200-400m": 138,
+      ">400m": 54,
+      "total": 341
+    },
+    "train_C": {
+      "0-200m": 287,
+      "200-400m": 133,
+      ">400m": 2,
+      "total": 422
+    },
+    "train_D": {
+      "0-200m": 1004,
+      "200-400m": 41,
+      ">400m": 0,
+      "total": 1045
+    },
+    "eval": {
+      "0-200m": 83,
+      "200-400m": 0,
+      ">400m": 0,
+      "total": 83
+    },
+    "eval_B": {
+      "0-200m": 359,
+      "200-400m": 351,
+      ">400m": 31,
+      "total": 741
+    }
+  },
+  "rule4_eval_band_check": {
+    "eval_0_200m_vehicles": 442,
+    "eval_200_400m_vehicles": 351,
+    "both_bands_populated": true
+  }
+}
