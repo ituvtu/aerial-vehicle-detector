@@ -17,8 +17,9 @@
   },
   "pretrained_transfer": {
     "source": "yolo26n.pt",
-    "transferred_items": 0,
-    "total_items": 0,
-    "message": ""
+    "checkpoint": "weights\\pico_p2_pretrained_init.pt",
+    "transferred_items": 46,
+    "total_items": 66,
+    "message": "Transferred 46/66 tensors into pico_p2_pretrained_init.pt"
   }
 }

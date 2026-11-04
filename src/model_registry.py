@@ -308,3 +308,86 @@ class ModelRegistry:
                 f"{m.get('best_conf_threshold', 0.25):<6.2f} {params_str:<10} {is_c}"
             )
         return "\n".join(lines)
+
+
+def create_pretrained_pico_checkpoint(
+    yaml_path: str | Path = "configs/yolo26_pico_p2.yaml",
+    backbone_source: str | Path = "yolo26n.pt",
+    output_path: str | Path = "weights/pico_p2_pretrained_init.pt",
+    report_path: str | Path | None = "results/model_architecture_report.json",
+    num_stem_layers: int = 5,
+) -> dict[str, Any]:
+    """
+    Builds Pico-P2 from YAML, copies exactly-matching (name + shape) tensors of layers
+    0..num_stem_layers-1 from a local COCO checkpoint, and persists a real .pt file so that
+    Ultralytics' trainer (which rebuilds the model from a .pt) keeps the transferred weights.
+    Updates the pretrained_transfer section of the architecture report.
+    """
+    import torch
+    from ultralytics import YOLO
+
+    source_p = Path(backbone_source)
+    if not source_p.exists():
+        raise FileNotFoundError(
+            f"Backbone source weights not found locally: {source_p}. Download them first."
+        )
+    yaml_p = Path(yaml_path)
+    if not yaml_p.exists():
+        raise FileNotFoundError(f"Model architecture YAML not found at: {yaml_p}")
+
+    target_model = YOLO(str(yaml_p))
+
+    try:
+        ckpt = torch.load(str(source_p), map_location="cpu", weights_only=False)
+    except TypeError:
+        ckpt = torch.load(str(source_p), map_location="cpu")
+    if isinstance(ckpt, dict) and "model" in ckpt:
+        src_obj = ckpt.get("ema") or ckpt["model"]
+        source_state = src_obj.float().state_dict() if hasattr(src_obj, "state_dict") else dict(src_obj)
+    else:
+        source_state = ckpt.state_dict() if hasattr(ckpt, "state_dict") else dict(ckpt)
+
+    prefixes = tuple(f"model.{i}." for i in range(num_stem_layers))
+    target_state = target_model.model.state_dict()
+    stem_keys = [k for k in target_state if k.startswith(prefixes)]
+    matched = {
+        k: source_state[k].clone()
+        for k in stem_keys
+        if k in source_state and source_state[k].shape == target_state[k].shape
+    }
+    transferred_count = len(matched)
+    assert transferred_count > 0, (
+        f"No tensors transferred from {source_p} into layers 0..{num_stem_layers - 1}"
+    )
+    target_state.update(matched)
+    target_model.model.load_state_dict(target_state, strict=True)
+
+    out_p = Path(output_path)
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "model": target_model.model,
+            "transferred_tensors": transferred_count,
+            "total_stem_tensors": len(stem_keys),
+            "source": str(source_p),
+        },
+        str(out_p),
+    )
+
+    info = {
+        "source": str(source_p),
+        "checkpoint": str(out_p),
+        "transferred_items": transferred_count,
+        "total_items": len(stem_keys),
+        "message": f"Transferred {transferred_count}/{len(stem_keys)} tensors into {out_p.name}",
+    }
+
+    if report_path:
+        rp = Path(report_path)
+        report = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {}
+        report["pretrained_transfer"] = info
+        rp.parent.mkdir(parents=True, exist_ok=True)
+        rp.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    print(info["message"])
+    return info

@@ -45,7 +45,7 @@ from src.metrics import (
     inspect_and_verify_architecture,
     transfer_coco_stem_weights,
 )
-from src.model_registry import ModelRegistry
+from src.model_registry import ModelRegistry, create_pretrained_pico_checkpoint
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -252,15 +252,19 @@ def train_single_experiment(
     from ultralytics import YOLO
 
     print(f"\n{'='*70}\n[Training] Starting Experiment: {exp_name}\nHyperparameters: {exp_opts}\n{'='*70}")
-    model = YOLO(str(arch_yaml))
-
-    # Pretrained stem transfer
     if pretrained_stem:
-        try:
-            transfer_coco_stem_weights(model, weights_path="yolo26n.pt")
-        except Exception as exc:
-            print(f"[Pretrained Transfer] Failed deterministic transfer: {exc}")
+        # Persist transferred stem into a real .pt so Ultralytics' trainer cannot re-init it.
+        init_pt = weights_dir / "pico_p2_pretrained_init.pt"
+        info = create_pretrained_pico_checkpoint(
+            yaml_path=arch_yaml,
+            backbone_source="yolo26n.pt",
+            output_path=init_pt,
+            report_path=results_dir / "model_architecture_report.json",
+        )
+        print(f"[Pretrained Transfer] {info['message']}")
+        model = YOLO(str(init_pt))
     else:
+        model = YOLO(str(arch_yaml))
         try:
             model.load("yolo26n.pt")
             print("[Pretrained Transfer] Transferred stem weights from yolo26n.pt")
