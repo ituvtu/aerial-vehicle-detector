@@ -1,0 +1,1 @@
+"""Core package for the Aerial Vehicle Detector pipeline."""

@@ -1,0 +1,10 @@
+# Конфігурація датасету для Ultralytics YOLO
+# Шляхи у splits/*.txt генеруються автоматично з data/manifest.csv
+path: .
+train: data/splits/train.txt
+val: data/splits/val.txt
+test: data/splits/test.txt
+
+nc: 1
+names:
+  0: vehicle

@@ -1,0 +1,58 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Python & uv
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Службові файли ОС та IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Важкі сирі дані та нарізані кадри (синхронізуються через Google Drive)
+data/raw_videos/*.mp4
+data/raw_videos/*.mov
+data/raw_videos/*.avi
+data/images/*.jpg
+data/images/*.png
+data/*.zip
+
+# Проміжні артефакти навчання Ultralytics та кеші
+runs/
+data/*.cache
+data/labels/*.cache
+data/splits/*.cache
+*.onnx
+*.engine
+
+# Залишаємо у Git тільки фінальні ваги best.pt, ігноруємо проміжні чекпоїнти
+weights/*.pt
+!weights/best.pt
+yolo*.pt
+yoloe*.pt
+
+
+# Test / coverage artifacts and partial downloads
+.pytest_tmp/
+.coverage
+coverage.xml
+*.part
+data/audit_report.json

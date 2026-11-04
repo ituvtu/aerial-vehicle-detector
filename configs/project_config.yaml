@@ -1,0 +1,103 @@
+project:
+  name: "aerial-vehicle-detector"
+  seed: 42
+  num_classes: 1
+  class_name: "vehicle"
+
+paths:
+  raw_videos_dir: "data/raw_videos"
+  images_dir: "data/images"
+  labels_raw_dir: "data/labels_raw"
+  labels_dir: "data/labels"
+  splits_dir: "data/splits"
+  manifest_path: "data/manifest.csv"
+  audit_report_path: "data/audit_report.json"
+  images_bundle_zip: "data/images_bundle.zip"
+  dataset_yaml: "configs/dataset.yaml"
+  model_arch_yaml: "configs/yolo26_pico_p2.yaml"
+  best_weights_path: "weights/best.pt"
+  assets_dir: "assets"
+
+videos:
+  "8968356":
+    filename: "8968356.mp4"
+    role: "train_A"
+    scene: "highway interchange"
+    is_eval: false
+  "5382494":
+    filename: "5382494.mp4"
+    role: "train_B"
+    scene: "rural highway, light traffic"
+    is_eval: false
+  "8457857":
+    filename: "8457857.mp4"
+    role: "train_C"
+    scene: "simple highway, top-down"
+    is_eval: false
+  "3405804":
+    filename: "3405804.mp4"
+    role: "train_D"
+    scene: "urban intersection"
+    is_eval: false
+  "32179597":
+    filename: "32179597.mp4"
+    role: "eval"
+    scene: "city highway, daytime"
+    is_eval: true
+
+extraction:
+  target_fps: 1.0
+  train_temporal_ratio: 0.80  # Перші 80% кадрів кожного train-відео -> train, останні 20% -> val
+  jpeg_quality: 95
+
+optics:
+  # Pinhole camera model parameters (Section 3.2)
+  fov_long_deg: 84.0          # Кут огляду вздовж довгої сторони кадру max(W, H)
+  car_length_m: 4.5           # Еталонна довжина легкового авто (м)
+  car_width_m: 1.8            # Еталонна ширина легкового авто (м)
+  estimation_method: "max_side"  # "max_side" (стійкий до діагональних доріг) або "geom_mean"
+  distance_bands:
+    near: [0.0, 200.0]
+    far: [200.0, 400.0]
+
+auto_label:
+  model_weights: "yoloe-26x-seg.pt"
+  prompt_classes:
+    - "car"
+    - "suv"
+    - "pickup truck"
+    - "truck"
+    - "bus"
+    - "van"
+  conf_threshold: 0.20
+  iou_threshold: 0.45
+  full_frame_imgsz: 1280
+  use_tiling_4k: true
+  tile_grid: [2, 2]
+  tile_overlap_ratio: 0.15
+  tile_imgsz: 1024
+
+training:
+  max_parameters: 500000
+  imgsz: 1024
+  train_rect: false  # false -> shuffle=True + mosaic під час навчання
+  eval_rect: true    # true -> прямокутний інференс/валідація 1024x576 без паддінгу
+  epochs: 150
+  patience: 35
+  batch_size: 16
+  # Аугментації для подолання доменного зсуву 16:9 (train) -> 9:16 (eval)
+  degrees: 15.0
+  flipud: 0.5
+  fliplr: 0.5
+  mosaic: 1.0
+  mixup: 0.15
+
+evaluation:
+  iou_matching_threshold: 0.50
+  default_conf_threshold: 0.25  # Буде автоматично перекалібровано на val-спліті (Rule 1)
+  calibrated_conf_threshold: null
+
+
+remote_data:
+  images_bundle_url: "https://huggingface.co/datasets/ituvtu/aerial-vehicle-detector-data/resolve/main/images_bundle.zip"
+  eval_video_url: "https://huggingface.co/datasets/ituvtu/aerial-vehicle-detector-data/resolve/main/32179597.mp4"
