@@ -31,27 +31,38 @@ data/*.zip
 data/images/
 data/raw_videos/
 
-# CVAT local working directories & artifacts
+# CVAT local working directories & temporary Colab bundles
 data/cvat/
 data/cvat/backups/
 artifacts/*.zip
 colab_results_bundle*.zip
-results/*.mp4
+*bundle*.zip
+bundles/
 results/evaluations/**/*.mp4
+!results/eval_demo_32179597_full_fps.mp4
+!results/eval_gt_vs_pred_1fps.mp4
 
 # Ultralytics artifacts & caches
 runs/
+weights/runs/
 data/*.cache
 data/labels/*.cache
 data/splits/*.cache
 *.onnx
 *.engine
 
-# Model weights: track best.pt and metadata json only
+# Model weights: ignore transient checkpoints, track shipped weights, metadata JSON, and registry
 weights/*.pt
 !weights/best.pt
+!weights/m004_best_precision.pt
+!weights/m003_best_recall.pt
+!weights/pico_p2_pretrained_init.pt
 weights/*.json
 !weights/*.json
+!weights/calibration_val.json
+!weights/model_architecture_report.json
+!weights/model_arch_report.json
+!weights/registry/**
 yolo*.pt
 yoloe*.pt
 

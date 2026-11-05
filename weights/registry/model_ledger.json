@@ -1,5 +1,131 @@
 {
   "schema_version": "1.0",
-  "active_champion_id": null,
-  "models": []
+  "active_champion_id": "m004",
+  "models": [
+    {
+      "model_id": "m001",
+      "exp_name": "exp1_mosaic",
+      "created_at_utc": "20261104T221252Z",
+      "folder_name": "m001_exp1_mosaic_20261104T221252Z_ec0238fb",
+      "weights_sha256": "ec0238fbf1937ced4f41fca424c6a2d41a322617483912444de953aaf50334f1",
+      "val_selection_score": 0.7428,
+      "val_macro_f1": 0.744,
+      "val_map50": 0.7416,
+      "best_conf_threshold": 0.25,
+      "unfused_params": 478590,
+      "fused_params": 427567,
+      "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+      "hyperparameters": {
+        "epochs": 150,
+        "batch": 8,
+        "imgsz": 1024,
+        "rect": false,
+        "mosaic": 1.0,
+        "close_mosaic": 25,
+        "scale": 0.5
+      },
+      "is_champion": false,
+      "original_model_id": "m001"
+    },
+    {
+      "model_id": "m002",
+      "exp_name": "exp2_rect_nomosaic",
+      "created_at_utc": "20261104T221702Z",
+      "folder_name": "m002_exp2_rect_nomosaic_20261104T221702Z_bdf9970a",
+      "weights_sha256": "bdf9970a846b028998191407d20427fbe81ab84c060c4cfe69e47395711d5e3b",
+      "val_selection_score": 0.7261,
+      "val_macro_f1": 0.7216,
+      "val_map50": 0.7305,
+      "best_conf_threshold": 0.2,
+      "unfused_params": 478590,
+      "fused_params": 427567,
+      "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+      "hyperparameters": {
+        "epochs": 150,
+        "batch": 8,
+        "imgsz": 1024,
+        "rect": true,
+        "mosaic": 0.0,
+        "close_mosaic": 0,
+        "scale": 0.25
+      },
+      "is_champion": false,
+      "original_model_id": "m002"
+    },
+    {
+      "model_id": "m003",
+      "exp_name": "exp3_pretrained",
+      "created_at_utc": "20261104T232921Z",
+      "folder_name": "m003_exp3_pretrained_20261104T232921Z_3af3f707",
+      "weights_sha256": "3af3f707060ad85000bd226cb2aa2fec1e13a59f2e9b5d2dcaf417686bb1782d",
+      "val_selection_score": 0.7466,
+      "val_macro_f1": 0.75,
+      "val_map50": 0.7432,
+      "best_conf_threshold": 0.25,
+      "unfused_params": 478590,
+      "fused_params": 427567,
+      "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+      "hyperparameters": {
+        "epochs": 150,
+        "batch": 8,
+        "imgsz": 1024,
+        "rect": false,
+        "mosaic": 1.0,
+        "close_mosaic": 25,
+        "scale": 0.5
+      },
+      "is_champion": false,
+      "original_model_id": "m001"
+    },
+    {
+      "model_id": "m004",
+      "exp_name": "exp4_pretrained_negatives",
+      "created_at_utc": "20261104T234901Z",
+      "folder_name": "m004_exp4_pretrained_negatives_20261104T234901Z_7085ceb1",
+      "weights_sha256": "7085ceb1e50c3938c7fc5126f11df398a748c01ea691a337c10d62fb0e0c1466",
+      "val_selection_score": 0.7517,
+      "val_macro_f1": 0.7458,
+      "val_map50": 0.7576,
+      "best_conf_threshold": 0.35,
+      "unfused_params": 478590,
+      "fused_params": 427567,
+      "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+      "hyperparameters": {
+        "epochs": 150,
+        "batch": 8,
+        "imgsz": 1024,
+        "rect": false,
+        "mosaic": 1.0,
+        "close_mosaic": 25,
+        "scale": 0.5
+      },
+      "is_champion": true,
+      "original_model_id": "m001"
+    },
+    {
+      "model_id": "m005",
+      "exp_name": "exp3_pretrained_v1_scratch",
+      "created_at_utc": "20261104T231224Z",
+      "folder_name": "m005_exp3_pretrained_v1_scratch_20261104T231224Z_b6ebd73d",
+      "weights_sha256": "b6ebd73d285958a5176eca90a88ae8822ba504083c8e36e1fd2557988a770e20",
+      "val_selection_score": 0.6259,
+      "val_macro_f1": 0.6149,
+      "val_map50": 0.6368,
+      "best_conf_threshold": 0.2,
+      "unfused_params": 478590,
+      "fused_params": 427567,
+      "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+      "hyperparameters": {
+        "epochs": 150,
+        "batch": 8,
+        "imgsz": 1024,
+        "rect": false,
+        "mosaic": 1.0,
+        "close_mosaic": 25,
+        "scale": 0.5
+      },
+      "is_champion": false,
+      "original_model_id": "m001"
+    }
+  ]
 }

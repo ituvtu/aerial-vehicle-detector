@@ -186,45 +186,116 @@ def plot_ablation_comparison_curves(
     out_png: Path,
     assets_png: Path | None = None,
 ) -> None:
-    """Plots side-by-side comparison of exp1_mosaic vs exp2_rect_nomosaic."""
+    """
+    Plots training progression curves across all registered runs (m001..m005)
+    using exact README run identifiers, falling back to csv1/csv2 for unit-test mocks.
+    """
     import pandas as pd
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    base_dir = csv1.parent
+    c_m003 = base_dir / "train_history_exp3_pretrained.csv"
+    c_m004 = base_dir / "train_history_exp4_pretrained_negatives.csv"
+    c_m005 = base_dir / "train_history_exp3_pretrained_v1_scratch.csv"
 
-    def _plot_csv(csv_path: Path, label_prefix: str, color: str):
-        if not csv_path.exists():
-            return
-        df = pd.read_csv(csv_path)
-        df.columns = [c.strip() for c in df.columns]
-        epochs = df["epoch"] if "epoch" in df.columns else range(len(df))
+    has_full_progression = c_m003.exists() and c_m004.exists()
 
-        # Box loss
-        box_col = [c for c in df.columns if "train/box_loss" in c or "box_loss" in c]
-        if box_col:
-            ax1.plot(epochs, df[box_col[0]], label=f"{label_prefix} Train Box Loss", color=color, linestyle="-")
-        val_box_col = [c for c in df.columns if "val/box_loss" in c]
-        if val_box_col:
-            ax1.plot(epochs, df[val_box_col[0]], label=f"{label_prefix} Val Box Loss", color=color, linestyle="--")
+    if has_full_progression:
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18.5, 5.4), gridspec_kw={"width_ratios": [1.15, 1.15, 0.95]})
+        run_specs = [
+            (c_m004, "m004 (best.pt: Pretrained Stem + 24 Negatives)", "#1b9e77", "-", 2.6, 1.0, 5),
+            (c_m003, "m003 (m003_best_recall.pt: Pretrained Stem 46/66)", "#2b5c8f", "-", 2.3, 0.95, 4),
+            (csv1,   "m001 (Baseline .yaml + Mosaic)", "#7570b3", "-.", 1.7, 0.85, 3),
+            (csv2,   "m002 (.yaml + rect=True, mosaic=0.0)", "#d95f02", "--", 1.6, 0.80, 2),
+            (c_m005, "m005 (Scratch Control: 0/66 Random Init)", "#888888", ":", 1.8, 0.80, 1),
+        ]
+        for csv_path, label, color, ls, lw, alpha, zord in run_specs:
+            if not csv_path.exists():
+                continue
+            df = pd.read_csv(csv_path)
+            df.columns = [c.strip() for c in df.columns]
+            epochs = df["epoch"] if "epoch" in df.columns else range(1, len(df) + 1)
 
-        # mAP50
-        map_col = [c for c in df.columns if "metrics/mAP50(B)" in c or "mAP50" in c]
-        if map_col:
-            ax2.plot(epochs, df[map_col[0]], label=f"{label_prefix} mAP@0.5", color=color, linewidth=2)
+            val_box_col = [c for c in df.columns if "val/box_loss" in c]
+            if val_box_col:
+                ax1.plot(epochs, df[val_box_col[0]], label=label, color=color, linestyle=ls, linewidth=lw, alpha=alpha, zorder=zord)
 
-    _plot_csv(csv1, "exp1_mosaic", "#1f77b4")
-    _plot_csv(csv2, "exp2_rect_nomosaic", "#ff7f0e")
+            map_col = [c for c in df.columns if "metrics/mAP50(B)" in c or "mAP50" in c]
+            if map_col:
+                ax2.plot(epochs, df[map_col[0]], label=label, color=color, linestyle=ls, linewidth=lw, alpha=alpha, zorder=zord)
 
-    ax1.set_title("Ablation Study: Loss Convergence")
-    ax1.set_xlabel("Epoch")
-    ax1.set_ylabel("Loss")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+        ax1.set_title("Validation Box Loss Convergence (150 Epochs)", fontsize=11, fontweight="bold")
+        ax1.set_xlabel("Epoch", fontsize=10)
+        ax1.set_ylabel("Validation Box Loss (lower is better)", fontsize=10)
+        ax1.set_ylim(1.95, 4.90)
+        ax1.legend(loc="upper right", fontsize=8.3, framealpha=0.92)
+        ax1.grid(True, alpha=0.3)
 
-    ax2.set_title("Ablation Study: Validation mAP@0.5")
-    ax2.set_xlabel("Epoch")
-    ax2.set_ylabel("mAP@0.5")
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
+        ax2.set_title("Epoch-by-Epoch Val mAP@0.5 (All Val Boxes)", fontsize=11, fontweight="bold")
+        ax2.set_xlabel("Epoch", fontsize=10)
+        ax2.set_ylabel("Validation mAP@0.5 (higher is better)", fontsize=10)
+        ax2.set_ylim(0.0, 0.72)
+        ax2.legend(loc="lower right", fontsize=8.3, framealpha=0.92)
+        ax2.grid(True, alpha=0.3)
+
+        # Panel 3: Final Calibrated Val Metrics (0-400m, rect=True @ tau*) matching README table
+        runs_order = ["m001\n(Baseline)", "m002\n(No Mosaic)", "m003\n(Stem 46/66)", "m004 (best)\n(+24 Negs)", "m005\n(Scratch 0/66)"]
+        macro_f1s = [0.744, 0.722, 0.750, 0.746, 0.615]
+        map50s = [0.742, 0.731, 0.743, 0.758, 0.637]
+
+        x = np.arange(len(runs_order))
+        width = 0.36
+        b1 = ax3.bar(x - width / 2, macro_f1s, width, label="Val Macro-F1 (0–400m @ τ*)", color="#2b5c8f", alpha=0.90)
+        b2 = ax3.bar(x + width / 2, map50s, width, label="Val mAP@0.5 (0–400m, rect=True)", color="#1b9e77", alpha=0.90)
+
+        for bar in b1:
+            h = bar.get_height()
+            ax3.text(bar.get_x() + bar.get_width() / 2, h + 0.006, f"{h:.3f}", ha="center", va="bottom", fontsize=7.8, fontweight="bold", color="#1d3f63")
+        for bar in b2:
+            h = bar.get_height()
+            ax3.text(bar.get_x() + bar.get_width() / 2, h + 0.006, f"{h:.3f}", ha="center", va="bottom", fontsize=7.8, fontweight="bold", color="#136f52")
+
+        ax3.set_title("Calibrated Val Metrics (0–400 m @ τ*)", fontsize=11, fontweight="bold")
+        ax3.set_xticks(x)
+        ax3.set_xticklabels(runs_order, fontsize=8.5)
+        ax3.set_ylim(0.50, 0.81)
+        ax3.set_ylabel("Score on 18 Val Frames (Rule 1)", fontsize=10)
+        ax3.legend(loc="lower left", fontsize=8.3, framealpha=0.92)
+        ax3.grid(axis="y", alpha=0.3)
+    else:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+
+        def _plot_csv(csv_path: Path, label_prefix: str, color: str):
+            if not csv_path.exists():
+                return
+            df = pd.read_csv(csv_path)
+            df.columns = [c.strip() for c in df.columns]
+            epochs = df["epoch"] if "epoch" in df.columns else range(len(df))
+
+            box_col = [c for c in df.columns if "train/box_loss" in c or "box_loss" in c]
+            if box_col:
+                ax1.plot(epochs, df[box_col[0]], label=f"{label_prefix} Train Box Loss", color=color, linestyle="-")
+            val_box_col = [c for c in df.columns if "val/box_loss" in c]
+            if val_box_col:
+                ax1.plot(epochs, df[val_box_col[0]], label=f"{label_prefix} Val Box Loss", color=color, linestyle="--")
+
+            map_col = [c for c in df.columns if "metrics/mAP50(B)" in c or "mAP50" in c]
+            if map_col:
+                ax2.plot(epochs, df[map_col[0]], label=f"{label_prefix} mAP@0.5", color=color, linewidth=2)
+
+        _plot_csv(csv1, "m001 (exp1_mosaic)", "#1f77b4")
+        _plot_csv(csv2, "m002 (exp2_rect_nomosaic)", "#ff7f0e")
+
+        ax1.set_title("Ablation Study: Loss Convergence")
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss")
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        ax2.set_title("Ablation Study: Validation mAP@0.5")
+        ax2.set_xlabel("Epoch")
+        ax2.set_ylabel("mAP@0.5")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
     out_png.parent.mkdir(parents=True, exist_ok=True)

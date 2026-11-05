@@ -1,0 +1,429 @@
+{
+  "conf_threshold": 0.35,
+  "num_frames": 64,
+  "bands": {
+    "0-200m": {
+      "tp": 114,
+      "fp": 105,
+      "fn": 327,
+      "num_gt": 441,
+      "num_frames": 64,
+      "detection_rate": 0.2585,
+      "precision": 0.5205,
+      "f1": 0.3455,
+      "false_alarms_per_min": 98.4375,
+      "time_to_first_detection_s": 0.519,
+      "time_to_first_detection_breakdown": {
+        "32179597": {
+          "delay_s": 1.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 1.0,
+          "detected": true
+        },
+        "13763017": {
+          "delay_s": 0.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 0.0,
+          "detected": true
+        }
+      },
+      "map50": 0.3852
+    },
+    "200-400m": {
+      "tp": 26,
+      "fp": 46,
+      "fn": 326,
+      "num_gt": 352,
+      "num_frames": 64,
+      "detection_rate": 0.0739,
+      "precision": 0.3611,
+      "f1": 0.1226,
+      "false_alarms_per_min": 43.125,
+      "time_to_first_detection_s": 9.011,
+      "time_to_first_detection_breakdown": {
+        "13763017": {
+          "delay_s": 9.011,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 8.992,
+          "detected": true
+        }
+      },
+      "map50": 0.1411
+    },
+    ">400m": {
+      "tp": 0,
+      "fp": 9,
+      "fn": 46,
+      "num_gt": 46,
+      "num_frames": 64,
+      "detection_rate": 0.0,
+      "precision": 0.0,
+      "f1": 0.0,
+      "false_alarms_per_min": 8.4375,
+      "time_to_first_detection_s": null,
+      "time_to_first_detection_breakdown": {
+        "13763017": {
+          "delay_s": null,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": null,
+          "detected": false
+        }
+      },
+      "map50": 0.0
+    },
+    "overall_0_400m": {
+      "tp": 140,
+      "fp": 151,
+      "fn": 653,
+      "num_gt": 793,
+      "num_frames": 64,
+      "detection_rate": 0.1765,
+      "precision": 0.4811,
+      "f1": 0.2583,
+      "false_alarms_per_min": 141.5625,
+      "time_to_first_detection_s": 0.519,
+      "time_to_first_detection_breakdown": {
+        "32179597": {
+          "delay_s": 1.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 1.0,
+          "detected": true
+        },
+        "13763017": {
+          "delay_s": 0.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 0.0,
+          "detected": true
+        }
+      },
+      "map50": 0.2765
+    },
+    "overall_all": {
+      "tp": 140,
+      "fp": 160,
+      "fn": 699,
+      "num_gt": 839,
+      "num_frames": 64,
+      "detection_rate": 0.1669,
+      "precision": 0.4667,
+      "f1": 0.2458,
+      "false_alarms_per_min": 150.0,
+      "time_to_first_detection_s": 0.519,
+      "time_to_first_detection_breakdown": {
+        "32179597": {
+          "delay_s": 1.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 1.0,
+          "detected": true
+        },
+        "13763017": {
+          "delay_s": 0.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 0.0,
+          "detected": true
+        }
+      },
+      "map50": 0.2457
+    },
+    "overall": {
+      "tp": 140,
+      "fp": 151,
+      "fn": 653,
+      "num_gt": 793,
+      "num_frames": 64,
+      "detection_rate": 0.1765,
+      "precision": 0.4811,
+      "f1": 0.2583,
+      "false_alarms_per_min": 141.5625,
+      "time_to_first_detection_s": 0.519,
+      "time_to_first_detection_breakdown": {
+        "32179597": {
+          "delay_s": 1.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 1.0,
+          "detected": true
+        },
+        "13763017": {
+          "delay_s": 0.019,
+          "first_gt_ts": 0.0,
+          "first_tp_ts": 0.0,
+          "detected": true
+        }
+      },
+      "map50": 0.2765
+    }
+  },
+  "model_id": "custom_weights",
+  "weights_sha256": "7085ceb1e50c3938c7fc5126f11df398a748c01ea691a337c10d62fb0e0c1466",
+  "architecture": {
+    "unfused_params": 478590,
+    "fused_params": 427567,
+    "max_params_limit": 500000,
+    "strides": [
+      4.0,
+      8.0,
+      16.0
+    ],
+    "num_layers": 22,
+    "backbone_params": 220448,
+    "neck_params": 162496,
+    "head_params": 95646
+  },
+  "latency_benchmark": {
+    "device": "cuda:0",
+    "mean_ms": 18.84,
+    "median_ms": 15.52,
+    "p95_ms": 19.23,
+    "fps": 53.08,
+    "meets_realtime_33ms": true,
+    "breakdown_mean_ms": {
+      "preprocess_ms": 3.76,
+      "inference_ms": 12.48,
+      "postprocess_ms": 1.8
+    }
+  },
+  "per_clip_bands": {
+    "eval": {
+      "0-200m": {
+        "tp": 57,
+        "fp": 71,
+        "fn": 28,
+        "num_gt": 85,
+        "num_frames": 31,
+        "detection_rate": 0.6706,
+        "precision": 0.4453,
+        "f1": 0.5352,
+        "false_alarms_per_min": 137.4194,
+        "time_to_first_detection_s": 1.019,
+        "time_to_first_detection_breakdown": {
+          "32179597": {
+            "delay_s": 1.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 1.0,
+            "detected": true
+          }
+        },
+        "map50": 0.4927
+      },
+      "200-400m": {
+        "tp": 0,
+        "fp": 35,
+        "fn": 0,
+        "num_gt": 0,
+        "num_frames": 31,
+        "detection_rate": 1.0,
+        "precision": 0.0,
+        "f1": 0.0,
+        "false_alarms_per_min": 67.7419,
+        "time_to_first_detection_s": null,
+        "time_to_first_detection_breakdown": {},
+        "map50": 0.0
+      },
+      ">400m": {
+        "tp": 0,
+        "fp": 9,
+        "fn": 0,
+        "num_gt": 0,
+        "num_frames": 31,
+        "detection_rate": 1.0,
+        "precision": 0.0,
+        "f1": 0.0,
+        "false_alarms_per_min": 17.4194,
+        "time_to_first_detection_s": null,
+        "time_to_first_detection_breakdown": {},
+        "map50": 0.0
+      },
+      "overall_0_400m": {
+        "tp": 57,
+        "fp": 106,
+        "fn": 28,
+        "num_gt": 85,
+        "num_frames": 31,
+        "detection_rate": 0.6706,
+        "precision": 0.3497,
+        "f1": 0.4597,
+        "false_alarms_per_min": 205.1613,
+        "time_to_first_detection_s": 1.019,
+        "time_to_first_detection_breakdown": {
+          "32179597": {
+            "delay_s": 1.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 1.0,
+            "detected": true
+          }
+        },
+        "map50": 0.4417
+      },
+      "overall_all": {
+        "tp": 57,
+        "fp": 115,
+        "fn": 28,
+        "num_gt": 85,
+        "num_frames": 31,
+        "detection_rate": 0.6706,
+        "precision": 0.3314,
+        "f1": 0.4436,
+        "false_alarms_per_min": 222.5806,
+        "time_to_first_detection_s": 1.019,
+        "time_to_first_detection_breakdown": {
+          "32179597": {
+            "delay_s": 1.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 1.0,
+            "detected": true
+          }
+        },
+        "map50": 0.4337
+      },
+      "overall": {
+        "tp": 57,
+        "fp": 106,
+        "fn": 28,
+        "num_gt": 85,
+        "num_frames": 31,
+        "detection_rate": 0.6706,
+        "precision": 0.3497,
+        "f1": 0.4597,
+        "false_alarms_per_min": 205.1613,
+        "time_to_first_detection_s": 1.019,
+        "time_to_first_detection_breakdown": {
+          "32179597": {
+            "delay_s": 1.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 1.0,
+            "detected": true
+          }
+        },
+        "map50": 0.4417
+      }
+    },
+    "eval_B": {
+      "0-200m": {
+        "tp": 57,
+        "fp": 34,
+        "fn": 299,
+        "num_gt": 356,
+        "num_frames": 33,
+        "detection_rate": 0.1601,
+        "precision": 0.6264,
+        "f1": 0.255,
+        "false_alarms_per_min": 61.8182,
+        "time_to_first_detection_s": 0.019,
+        "time_to_first_detection_breakdown": {
+          "13763017": {
+            "delay_s": 0.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 0.0,
+            "detected": true
+          }
+        },
+        "map50": 0.4532
+      },
+      "200-400m": {
+        "tp": 26,
+        "fp": 11,
+        "fn": 326,
+        "num_gt": 352,
+        "num_frames": 33,
+        "detection_rate": 0.0739,
+        "precision": 0.7027,
+        "f1": 0.1337,
+        "false_alarms_per_min": 20.0,
+        "time_to_first_detection_s": 9.011,
+        "time_to_first_detection_breakdown": {
+          "13763017": {
+            "delay_s": 9.011,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 8.992,
+            "detected": true
+          }
+        },
+        "map50": 0.3303
+      },
+      ">400m": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 46,
+        "num_gt": 46,
+        "num_frames": 33,
+        "detection_rate": 0.0,
+        "precision": 0.0,
+        "f1": 0.0,
+        "false_alarms_per_min": 0.0,
+        "time_to_first_detection_s": null,
+        "time_to_first_detection_breakdown": {
+          "13763017": {
+            "delay_s": null,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": null,
+            "detected": false
+          }
+        },
+        "map50": 0.0
+      },
+      "overall_0_400m": {
+        "tp": 83,
+        "fp": 45,
+        "fn": 625,
+        "num_gt": 708,
+        "num_frames": 33,
+        "detection_rate": 0.1172,
+        "precision": 0.6484,
+        "f1": 0.1986,
+        "false_alarms_per_min": 81.8182,
+        "time_to_first_detection_s": 0.019,
+        "time_to_first_detection_breakdown": {
+          "13763017": {
+            "delay_s": 0.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 0.0,
+            "detected": true
+          }
+        },
+        "map50": 0.3803
+      },
+      "overall_all": {
+        "tp": 83,
+        "fp": 45,
+        "fn": 671,
+        "num_gt": 754,
+        "num_frames": 33,
+        "detection_rate": 0.1101,
+        "precision": 0.6484,
+        "f1": 0.1882,
+        "false_alarms_per_min": 81.8182,
+        "time_to_first_detection_s": 0.019,
+        "time_to_first_detection_breakdown": {
+          "13763017": {
+            "delay_s": 0.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 0.0,
+            "detected": true
+          }
+        },
+        "map50": 0.3574
+      },
+      "overall": {
+        "tp": 83,
+        "fp": 45,
+        "fn": 625,
+        "num_gt": 708,
+        "num_frames": 33,
+        "detection_rate": 0.1172,
+        "precision": 0.6484,
+        "f1": 0.1986,
+        "false_alarms_per_min": 81.8182,
+        "time_to_first_detection_s": 0.019,
+        "time_to_first_detection_breakdown": {
+          "13763017": {
+            "delay_s": 0.019,
+            "first_gt_ts": 0.0,
+            "first_tp_ts": 0.0,
+            "detected": true
+          }
+        },
+        "map50": 0.3803
+      }
+    }
+  }
+}

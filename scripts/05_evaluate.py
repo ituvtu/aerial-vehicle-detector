@@ -35,7 +35,7 @@ from src.manifest_manager import (
     get_active_frames,
     parse_yolo_label_file,
 )
-from src.metrics import audit_model_architecture, evaluate_split_metrics
+from src.metrics import audit_model_architecture, evaluate_split_metrics, match_frame_detections
 from src.model_registry import ModelRegistry
 from src.optics import CameraOpticsConfig, assign_distance_band, estimate_distance_m_from_px
 
@@ -43,6 +43,26 @@ from src.optics import CameraOpticsConfig, assign_distance_band, estimate_distan
 def load_config(config_path: Path) -> dict[str, Any]:
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def draw_label_pill(
+    img: np.ndarray,
+    text: str,
+    x: int,
+    y: int,
+    color_bgr: tuple[int, int, int],
+    font_scale: float = 0.7,
+    thickness: int = 2,
+) -> None:
+    """Draws high-contrast text with a dark semi-opaque background pill for 4K readability."""
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    h_img, w_img = img.shape[:2]
+    x = max(4, min(x, w_img - tw - 8))
+    y = max(th + 6, min(y, h_img - 6))
+    cv2.rectangle(img, (x - 3, y - th - 4), (x + tw + 3, y + baseline + 2), (15, 15, 15), -1)
+    cv2.rectangle(img, (x - 3, y - th - 4), (x + tw + 3, y + baseline + 2), color_bgr, 1)
+    cv2.putText(img, text, (x, y), font, font_scale, color_bgr, thickness, cv2.LINE_AA)
 
 
 def draw_hud_banner(
@@ -54,24 +74,40 @@ def draw_hud_banner(
     near_count: int,
     far_count: int,
     conf_thresh: float,
+    gt_count: int | None = None,
+    tp_count: int | None = None,
+    fp_count: int | None = None,
+    fn_count: int | None = None,
+    frame_id: str | None = None,
 ) -> np.ndarray:
-    """Renders semi-transparent HUD telemetry banner at the top of the video frame."""
+    """Renders semi-transparent HUD telemetry banner with GT vs. Prediction legend at the top of the frame."""
     h, w = frame_bgr.shape[:2]
     overlay = frame_bgr.copy()
-    banner_h = int(h * 0.08)
+    banner_h = int(h * 0.095) if gt_count is not None else int(h * 0.08)
     cv2.rectangle(overlay, (0, 0), (w, banner_h), (20, 20, 20), -1)
-    alpha = 0.75
+    alpha = 0.80
     cv2.addWeighted(overlay, alpha, frame_bgr, 1.0 - alpha, 0, frame_bgr)
 
     fps_val = (1000.0 / latency_ms) if latency_ms > 0 else 0.0
-    hud_text_1 = f"{model_name} ({fused_params_k:.1f}k fused) | Clip: {clip_role} | Latency: {latency_ms:.1f}ms ({fps_val:.1f} FPS)"
-    hud_text_2 = f"Conf >= {conf_thresh:.2f} | 0-200m: {near_count} cars | 200-400m: {far_count} cars"
+    clip_label = f"{clip_role} ({frame_id})" if frame_id else clip_role
+    hud_text_1 = f"{model_name} ({fused_params_k:.1f}k fused) | Clip: {clip_label} | Latency: {latency_ms:.1f}ms ({fps_val:.1f} FPS)"
 
-    scale = max(0.5, w / 2500.0)
+    scale = max(0.55, w / 2300.0)
     thickness = max(1, int(round(scale * 2)))
 
-    cv2.putText(frame_bgr, hud_text_1, (20, int(banner_h * 0.45)), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thickness, cv2.LINE_AA)
-    cv2.putText(frame_bgr, hud_text_2, (20, int(banner_h * 0.85)), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 215, 255), thickness, cv2.LINE_AA)
+    if gt_count is not None and tp_count is not None and fp_count is not None and fn_count is not None:
+        hud_text_2 = (
+            f"Conf >= {conf_thresh:.2f} | GT: {gt_count} | Preds: {near_count + far_count} "
+            f"(0-200m: {near_count}, 200-400m: {far_count}) | Match @ IoU>=0.5: TP={tp_count}, FP={fp_count}, FN={fn_count}"
+        )
+        hud_text_3 = "BOX LEGEND:  [GREEN] Ground Truth (GT)   |   [CYAN] Model Pred (0-200m)   |   [ORANGE] Model Pred (200-400m)"
+        cv2.putText(frame_bgr, hud_text_1, (20, int(banner_h * 0.30)), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thickness, cv2.LINE_AA)
+        cv2.putText(frame_bgr, hud_text_2, (20, int(banner_h * 0.62)), cv2.FONT_HERSHEY_SIMPLEX, scale * 0.92, (0, 215, 255), thickness, cv2.LINE_AA)
+        cv2.putText(frame_bgr, hud_text_3, (20, int(banner_h * 0.91)), cv2.FONT_HERSHEY_SIMPLEX, scale * 0.88, (120, 255, 120), thickness, cv2.LINE_AA)
+    else:
+        hud_text_2 = f"Conf >= {conf_thresh:.2f} | 0-200m: {near_count} cars | 200-400m: {far_count} cars"
+        cv2.putText(frame_bgr, hud_text_1, (20, int(banner_h * 0.45)), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thickness, cv2.LINE_AA)
+        cv2.putText(frame_bgr, hud_text_2, (20, int(banner_h * 0.85)), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 215, 255), thickness, cv2.LINE_AA)
     return frame_bgr
 
 
@@ -116,7 +152,11 @@ def main() -> None:
     labels_dir = PROJECT_ROOT / cfg["paths"]["labels_dir"]
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    assets_dir = PROJECT_ROOT / "assets"
+    # Only write to repo root assets/ when output_dir is the default project results/ directory
+    if out_dir.resolve() == (PROJECT_ROOT / "results").resolve():
+        assets_dir = PROJECT_ROOT / "assets"
+    else:
+        assets_dir = out_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Resolve model checkpoint & calibration via ModelRegistry
@@ -266,14 +306,20 @@ def main() -> None:
         near_c = 0
         far_c = 0
 
-        # Draw GT boxes in Green
-        for g in gt_pixel_boxes:
-            cv2.rectangle(annotated_bgr, (int(g[0]), int(g[1])), (int(g[2]), int(g[3])), (0, 255, 0), 2)
+        filtered_preds = [p for p in frame_preds if p[4] >= conf_thresh]
+        match_res = match_frame_detections(gt_pixel_boxes, filtered_preds, w, h, iou_threshold=0.50)
+        tp_c = len(match_res["matched_tps"])
+        fp_c = len(match_res["fps"])
+        fn_c = len(match_res["fns"])
 
-        # Draw Predictions: Cyan (0-200m) or Orange (200-400m)
-        for p in frame_preds:
-            if p[4] < conf_thresh:
-                continue
+        # Draw GT boxes in bright Green with bottom-left 'GT' label
+        for g in gt_pixel_boxes:
+            gx1, gy1, gx2, gy2 = int(g[0]), int(g[1]), int(g[2]), int(g[3])
+            cv2.rectangle(annotated_bgr, (gx1, gy1), (gx2, gy2), (0, 255, 0), 3)
+            draw_label_pill(annotated_bgr, "GT", gx1, gy2 + 18, (0, 255, 0), font_scale=0.55, thickness=2)
+
+        # Draw Predictions: Cyan (0-200m) or Orange (200-400m) with top-left 'Pred' label
+        for p in filtered_preds:
             box_w = max(0.0, p[2] - p[0])
             box_h = max(0.0, p[3] - p[1])
             dist_m = estimate_distance_m_from_px(box_w, box_h, w, h, optics_cfg)
@@ -288,16 +334,16 @@ def main() -> None:
             else:
                 color = (180, 180, 180)  # Gray for >400m
 
-            cv2.rectangle(annotated_bgr, (int(p[0]), int(p[1])), (int(p[2]), int(p[3])), color, 2)
-            cv2.putText(
+            px1, py1, px2, py2 = int(p[0]), int(p[1]), int(p[2]), int(p[3])
+            cv2.rectangle(annotated_bgr, (px1, py1), (px2, py2), color, 3)
+            draw_label_pill(
                 annotated_bgr,
-                f"vehicle {p[4]:.2f} | {dist_m:.0f}m",
-                (int(p[0]), max(15, int(p[1]) - 5)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
+                f"Pred {p[4]:.2f} | {dist_m:.0f}m",
+                px1,
+                max(22, py1 - 6),
                 color,
-                1,
-                cv2.LINE_AA,
+                font_scale=0.60,
+                thickness=2,
             )
 
         hud_frame = draw_hud_banner(
@@ -309,6 +355,11 @@ def main() -> None:
             near_count=near_c,
             far_count=far_c,
             conf_thresh=conf_thresh,
+            gt_count=len(gt_pixel_boxes),
+            tp_count=tp_c,
+            fp_count=fp_c,
+            fn_count=fn_c,
+            frame_id=fid,
         )
         annotated_test_frames.append((
             fid,
@@ -452,14 +503,17 @@ def main() -> None:
     assets_samples_dir.mkdir(parents=True, exist_ok=True)
 
     saved_crops = 0
+    assets_per_role: dict[str, int] = {}
     for fid, hud_img, role, ts, near_c, far_c in annotated_test_frames:
-        if saved_crops >= args.max_vis_frames:
-            break
-        crop_path = eval_samples_dir / f"{fid}_vis.jpg"
-        cv2.imwrite(str(crop_path), hud_img)
-        if saved_crops < 4:
+        r_cnt = assets_per_role.get(role, 0)
+        if saved_crops < args.max_vis_frames:
+            crop_path = eval_samples_dir / f"{fid}_vis.jpg"
+            cv2.imwrite(str(crop_path), hud_img)
+            saved_crops += 1
+        if r_cnt < 2:
             cv2.imwrite(str(assets_samples_dir / f"{fid}_vis.jpg"), hud_img)
-        saved_crops += 1
+            cv2.imwrite(str(eval_samples_dir / f"{fid}_vis.jpg"), hud_img)
+            assets_per_role[role] = r_cnt + 1
     print(f"[Evaluation] Saved {saved_crops} sample crops to {eval_samples_dir}")
 
     # 13. Render 1-FPS Test Comparison Video (results/eval_gt_vs_pred_1fps.mp4)
@@ -486,8 +540,8 @@ def main() -> None:
             orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 3840
             total_raw_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 930
 
-            target_out_w = 1080
-            target_out_h = 1920
+            target_out_w = orig_w
+            target_out_h = orig_h
 
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             vw_full = cv2.VideoWriter(str(full_fps_out), fourcc, orig_fps, (target_out_w, target_out_h))

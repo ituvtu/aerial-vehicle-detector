@@ -215,21 +215,64 @@ def save_distance_distribution_plot(
 ) -> None:
     """Генерує гістограму розподілу автомобілів за фізичною відстанню для README."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=150)
+    fig, ax = plt.subplots(figsize=(9.5, 4.8), dpi=180)
 
-    clipped = [min(d, 450.0) for d in distances_m]
+    total_gt = len(distances_m)
+    n_near = sum(1 for d in distances_m if d <= 200.0)
+    n_far = sum(1 for d in distances_m if 200.0 < d <= 400.0)
+    n_very_far = sum(1 for d in distances_m if d > 400.0)
+
+    clipped = [min(d, 449.9) for d in distances_m]
     if clipped:
-        ax.hist(clipped, bins=30, range=(0, 450), color="#2b5c8f", edgecolor="white", alpha=0.88)
+        counts, bins, patches = ax.hist(
+            clipped, bins=45, range=(0, 450), edgecolor="white", linewidth=0.7, alpha=0.90
+        )
+        for patch, x_left in zip(patches, bins[:-1]):
+            if x_left < 199.9:
+                patch.set_facecolor("#2b5c8f")
+            elif x_left < 399.9:
+                patch.set_facecolor("#2ca02c")
+            else:
+                patch.set_facecolor("#7f7f7f")
 
-    ax.axvline(200.0, color="#d95f02", linestyle="--", linewidth=2, label="200m band boundary")
-    ax.axvline(400.0, color="#e7298a", linestyle="--", linewidth=2, label="400m max range")
-    ax.set_title("Vehicle Distance Distribution Across Dataset (Pinhole Camera Model)")
-    ax.set_xlabel("Estimated Physical Distance (m)")
-    ax.set_ylabel("Number of Vehicles")
-    ax.legend()
+    ax.axvline(200.0, color="#d95f02", linestyle="--", linewidth=2.2, label="200 m band boundary (48 px in 4K)")
+    ax.axvline(400.0, color="#e7298a", linestyle="--", linewidth=2.2, label="400 m max target range (24 px in 4K)")
+
+    # Band summary callout boxes matching the README Data table
+    y_max = ax.get_ylim()[1]
+    ax.set_ylim(0, y_max * 1.28)
+    y_top = y_max * 1.22
+
+    ax.text(
+        100.0, y_top,
+        f"0–200 m (Near Band)\n{n_near:,} GT ({n_near/max(1,total_gt)*100:.1f}%)\n751 train | 230 val | 441 test",
+        ha="center", va="top", fontsize=8.5, fontweight="bold", color="#1d3f63",
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="#eef5fc", edgecolor="#2b5c8f", alpha=0.95),
+    )
+    ax.text(
+        300.0, y_top,
+        f"200–400 m (Far Band)\n{n_far:,} GT ({n_far/max(1,total_gt)*100:.1f}%)\n655 train | 131 val | 352 test",
+        ha="center", va="top", fontsize=8.5, fontweight="bold", color="#1b611b",
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="#eefaf0", edgecolor="#2ca02c", alpha=0.95),
+    )
+    ax.text(
+        425.0, y_top,
+        f">400 m\n{n_very_far:,} GT ({n_very_far/max(1,total_gt)*100:.1f}%)\n(clipped at 450m)",
+        ha="center", va="top", fontsize=7.8, fontweight="bold", color="#444444",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="#f4f4f4", edgecolor="#7f7f7f", alpha=0.95),
+    )
+
+    ax.set_title(
+        f"Vehicle Distance Distribution Across Dataset (155 Frames, 6 Clips, {total_gt:,} Curated GT Vehicles)",
+        fontsize=11, fontweight="bold", pad=10,
+    )
+    ax.set_xlabel("Estimated Pinhole Physical Distance D = (f_px × 4.5 m) / max(w_px, h_px) [meters]", fontsize=9.5)
+    ax.set_ylabel("Number of Curated Vehicles", fontsize=9.5)
+    ax.set_xlim(0, 460)
+    ax.legend(loc="upper left", bbox_to_anchor=(0.01, 0.78), framealpha=0.92, fontsize=8.5)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(output_path)
+    fig.savefig(output_path, dpi=180)
     plt.close(fig)
 
 

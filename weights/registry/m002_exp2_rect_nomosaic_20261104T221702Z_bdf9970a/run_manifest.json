@@ -1,0 +1,25 @@
+{
+  "model_id": "m002",
+  "exp_name": "exp2_rect_nomosaic",
+  "created_at_utc": "20261104T221702Z",
+  "folder_name": "m002_exp2_rect_nomosaic_20261104T221702Z_bdf9970a",
+  "weights_sha256": "bdf9970a846b028998191407d20427fbe81ab84c060c4cfe69e47395711d5e3b",
+  "val_selection_score": 0.7261,
+  "val_macro_f1": 0.7216,
+  "val_map50": 0.7305,
+  "best_conf_threshold": 0.2,
+  "unfused_params": 478590,
+  "fused_params": 427567,
+  "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+  "hyperparameters": {
+    "epochs": 150,
+    "batch": 8,
+    "imgsz": 1024,
+    "rect": true,
+    "mosaic": 0.0,
+    "close_mosaic": 0,
+    "scale": 0.25
+  },
+  "is_champion": false,
+  "original_model_id": "m002"
+}

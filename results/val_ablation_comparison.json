@@ -1,0 +1,61 @@
+{
+  "dataset_snapshot_id": "v002_curated_20261104T211538Z_174a4443",
+  "val_frames_count": 18,
+  "experiments": {
+    "exp1_mosaic": {
+      "model_id": "m001",
+      "weights_sha8": "ec0238fb",
+      "val_selection_score": 0.7428,
+      "val_macro_f1": 0.744,
+      "val_map50": 0.7416,
+      "f1_0_200m": 0.771,
+      "f1_200_400m": 0.7171,
+      "best_conf_threshold": 0.25,
+      "is_champion": false
+    },
+    "exp2_rect_nomosaic": {
+      "model_id": "m002",
+      "weights_sha8": "bdf9970a",
+      "val_selection_score": 0.7261,
+      "val_macro_f1": 0.7216,
+      "val_map50": 0.7305,
+      "f1_0_200m": 0.7326,
+      "f1_200_400m": 0.7106,
+      "best_conf_threshold": 0.2,
+      "is_champion": false
+    },
+    "exp3_pretrained": {
+      "model_id": "m003",
+      "weights_sha8": "3af3f707",
+      "val_selection_score": 0.7466,
+      "val_macro_f1": 0.75,
+      "val_map50": 0.7432,
+      "f1_0_200m": 0.7763,
+      "f1_200_400m": 0.7236,
+      "best_conf_threshold": 0.25,
+      "is_champion": false
+    },
+    "exp4_pretrained_negatives": {
+      "model_id": "m004",
+      "weights_sha8": "7085ceb1",
+      "val_selection_score": 0.7517,
+      "val_macro_f1": 0.7458,
+      "val_map50": 0.7576,
+      "f1_0_200m": 0.7818,
+      "f1_200_400m": 0.7097,
+      "best_conf_threshold": 0.35,
+      "is_champion": true
+    },
+    "exp3_pretrained_v1_scratch": {
+      "model_id": "m005",
+      "weights_sha8": "b6ebd73d",
+      "val_selection_score": 0.6259,
+      "val_macro_f1": 0.6149,
+      "val_map50": 0.6368,
+      "f1_0_200m": 0.7256,
+      "f1_200_400m": 0.5043,
+      "best_conf_threshold": 0.2,
+      "is_champion": false
+    }
+  }
+}
